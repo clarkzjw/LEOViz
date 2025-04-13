@@ -1,0 +1,33 @@
+[project]
+name = "leoviz"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "clarkzjw",email = "i@jinwei.me"}
+]
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "matplotlib (>=3.10.1,<4.0.0)",
+    "skyfield (>=1.53,<2.0)",
+    "numpy (>=2.2.4,<3.0.0)",
+    "pandas (>=2.2.3,<3.0.0)",
+    "schedule (>=1.2.2,<2.0.0)",
+    "grpcio (>=1.71.0,<2.0.0)",
+    "grpcio-tools (>=1.71.0,<2.0.0)",
+    "protobuf (>=6.30.2,<7.0.0)",
+    "yagrc (>=1.1.2,<2.0.0)",
+    "typing-extensions (>=4.13.2,<5.0.0)",
+    "pyarrow (>=19.0.1,<20.0.0)",
+    "scipy (>=1.15.2,<2.0.0)",
+    "opencv-python (>=4.11.0.86,<5.0.0.0)",
+    "jupyter (>=1.1.1,<2.0.0)",
+    "cartopy (>=0.24.1,<0.25.0)"
+]
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry]
+package-mode = false
