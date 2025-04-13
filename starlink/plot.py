@@ -19,9 +19,11 @@ from skyfield.api import load
 cartopy.config["data_dir"] = os.getenv("CARTOPY_DIR", cartopy.config.get("data_dir"))
 
 from util import load_ping, load_tle_from_file, load_connected_satellites
+from pop import get_pop_data
+from pprint import pprint
 
 FRAME_TYPE = "FRAME_EARTH"
-
+POP_DATA = None
 
 centralLat = None
 centralLon = None
@@ -100,6 +102,33 @@ def plot_once(row, df_obstruction_map, df_rtt, df_sinr, all_satellites):
         s=10,
     )
 
+    try:
+        axSat.scatter(
+            POP_DATA["lons"],
+            POP_DATA["lats"],
+            transform=projPlateCarree,
+            color="purple",
+            label="POP",
+            s=60,
+            marker="x",
+        )
+
+        for lon, lat, name in zip(
+            POP_DATA["lons"], POP_DATA["lats"], POP_DATA["names"]
+        ):
+            axSat.text(
+                lon,
+                lat,
+                name,
+                transform=projPlateCarree,
+                fontsize=10,
+                color="black",
+                wrap=True,
+                clip_on=True,
+            )
+    except Exception as e:
+        print(str(e))
+
     axFullRTT.plot(
         df_rtt["timestamp"],
         df_rtt["rtt"],
@@ -159,22 +188,21 @@ def plot_once(row, df_obstruction_map, df_rtt, df_sinr, all_satellites):
         linewidth=2,
     )
 
-    for s in all_satellites_in_canvas:
-        axSat.scatter(s[1], s[0], transform=projPlateCarree, color="gray", s=30)
-        # axSat.text(
-        #     s[1],
-        #     s[0],
-        #     s[2],
-        #     transform=projPlateCarree,
-        #     fontsize=8,
-        #     color="black",
-        #     wrap=True,
-        #     clip_on=True,
-        # )
+    if all_satellites_in_canvas:
+        satellite_lons = [s[1] for s in all_satellites_in_canvas]
+        satellite_lats = [s[0] for s in all_satellites_in_canvas]
+        axSat.scatter(
+            satellite_lons,
+            satellite_lats,
+            transform=projPlateCarree,
+            color="gray",
+            s=30,
+        )
 
     axSat.set_title(
         f"Connected satellite: {connected_sat_name}, timestamp: {timestamp_str}"
     )
+
     axSat.legend(loc="upper left")
 
     axFullRTT.set_title("RTT")
@@ -237,12 +265,14 @@ def plot_once(row, df_obstruction_map, df_rtt, df_sinr, all_satellites):
     plt.tight_layout()
     plt.savefig(f"{FIGURE_DIR}/{timestamp_str}.png")
     plt.close()
+    print(f"Saved figure for {timestamp_str}")
 
 
 def plot():
     global projStereographic
     global centralLat
     global centralLon
+    global POP_DATA
 
     for file in [
         OBSTRUCTION_MAP_DATA,
@@ -271,7 +301,8 @@ def plot():
     CPU_COUNT = os.cpu_count() - 1 if os.cpu_count() > 1 else 1
     print(f"Process count: {CPU_COUNT}")
 
-    with Pool(CPU_COUNT - 1) as pool:
+    POP_DATA = get_pop_data(centralLat, centralLon, offsetLat, offsetLon)
+    with Pool(CPU_COUNT) as pool:
         for index, row in connected_satellites.iterrows():
             pool.apply_async(
                 plot_once,

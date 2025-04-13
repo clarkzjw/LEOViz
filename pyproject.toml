@@ -20,7 +20,9 @@ dependencies = [
     "typing-extensions (>=4.13.2,<5.0.0)",
     "pyarrow (>=19.0.1,<20.0.0)",
     "opencv-python (>=4.11.0.86,<5.0.0.0)",
-    "cartopy (>=0.24.1,<0.25.0)"
+    "cartopy (>=0.24.1,<0.25.0)",
+    "httpx (>=0.28.1,<0.29.0)",
+    "fastkml[lxml] (>=1.1.0,<2.0.0)"
 ]
 
 [build-system]
