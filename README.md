@@ -2,7 +2,9 @@
 
 ## Starlink
 
-![](./static/starlink.png)
+[![Video](./static/starlink.png)](https://onlineacademiccommunity.uvic.ca/starlink/wp-content/uploads/sites/8876/2025/04/victoria.mp4)
+
+*(Click to watch the video)*
 
 The method used to estimate the connected satellites is based on our previous paper [Trajectory-based Serving Satellite Identification with User Terminal's Field-of-View](https://dl.acm.org/doi/10.1145/3697253.3697266).
 
@@ -28,7 +30,9 @@ series = {LEO-NET '24}
 
 ## OneWeb
 
-![](./static/oneweb.png)
+[![Video](./static/oneweb.png)](https://onlineacademiccommunity.uvic.ca/oneweb/wp-content/uploads/sites/9326/2025/03/oneweb-2024-12-06-02-36-02.mp4)
+
+*(Click to watch the video)*
 
 The measurement scripts are compatible and tested with the following OneWeb user terminals
 

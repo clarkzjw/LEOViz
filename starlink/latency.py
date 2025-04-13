@@ -23,11 +23,10 @@ def icmp_ping() -> None:
     name = "ICMP_PING"
     logger.info("{}, {}".format(name, threading.current_thread()))
 
-    FILENAME = "{}/{}/ping-{}-{}-{}.txt".format(
+    FILENAME = "{}/{}/ping-{}-{}.txt".format(
         LATENCY_DATA_DIR,
         ensure_data_directory(LATENCY_DATA_DIR),
         INTERVAL_MS,
-        DURATION,
         date_time_string(),
     )
 

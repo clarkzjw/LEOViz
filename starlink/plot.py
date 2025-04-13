@@ -351,9 +351,7 @@ if __name__ == "__main__":
         f"grpc/{DATE}/obstruction_map-{DATE_TIME}.parquet"
     )
     SINR_DATA = Path(DATA_DIR).joinpath(f"grpc/{DATE}/PhyRxBeamSnrAvg-{DATE_TIME}.csv")
-    LATENCY_DATA = Path(DATA_DIR).joinpath(
-        f"latency/{DATE}/ping-10ms-1m-{DATE_TIME}.txt"
-    )
+    LATENCY_DATA = Path(DATA_DIR).joinpath(f"latency/{DATE}/ping-10ms-{DATE_TIME}.txt")
     TLE_DATA = Path(DATA_DIR).joinpath(f"TLE/{DATE}/starlink-tle-{DATE_TIME}.txt")
 
     FIGURE_DIR = Path(f"{DATA_DIR}/figures-{DATE_TIME}")
