@@ -14,26 +14,13 @@ from matplotlib import gridspec
 from skyfield.api import load
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
+import cartopy
+
+cartopy.config["data_dir"] = os.getenv("CARTOPY_DIR", cartopy.config.get("data_dir"))
 
 from util import load_ping, load_tle_from_file, load_connected_satellites
 
-DATA_DIR = "./test"
-
-DATE = "2025-04-13"
-DATE_TIME = f"{DATE}-04-33-21"
 FRAME_TYPE = "FRAME_EARTH"
-
-
-OBSTRUCTION_MAP_DATA = Path(DATA_DIR).joinpath(
-    f"grpc/{DATE}/obstruction_map-{DATE_TIME}.parquet"
-)
-SINR_DATA = Path(DATA_DIR).joinpath(f"grpc/{DATE}/PhyRxBeamSnrAvg-{DATE_TIME}.csv")
-LATENCY_DATA = Path(DATA_DIR).joinpath(f"latency/{DATE}/ping-10ms-1m-{DATE_TIME}.txt")
-TLE_DATA = Path(DATA_DIR).joinpath(f"TLE/{DATE}/starlink-tle-{DATE_TIME}.txt")
-
-FIGURE_DIR = Path(f"{DATA_DIR}/figures-{DATE_TIME}")
-if not FIGURE_DIR.exists():
-    os.makedirs(FIGURE_DIR, exist_ok=True)
 
 
 centralLat = None
@@ -355,6 +342,23 @@ if __name__ == "__main__":
         projStereographic = ccrs.Stereographic(
             central_longitude=centralLon, central_latitude=centralLat
         )
+
+    DATA_DIR = args.dir
+    DATE_TIME = args.id
+    DATE = "-".join(args.id.split("-")[:3])
+
+    OBSTRUCTION_MAP_DATA = Path(DATA_DIR).joinpath(
+        f"grpc/{DATE}/obstruction_map-{DATE_TIME}.parquet"
+    )
+    SINR_DATA = Path(DATA_DIR).joinpath(f"grpc/{DATE}/PhyRxBeamSnrAvg-{DATE_TIME}.csv")
+    LATENCY_DATA = Path(DATA_DIR).joinpath(
+        f"latency/{DATE}/ping-10ms-1m-{DATE_TIME}.txt"
+    )
+    TLE_DATA = Path(DATA_DIR).joinpath(f"TLE/{DATE}/starlink-tle-{DATE_TIME}.txt")
+
+    FIGURE_DIR = Path(f"{DATA_DIR}/figures-{DATE_TIME}")
+    if not FIGURE_DIR.exists():
+        os.makedirs(FIGURE_DIR, exist_ok=True)
 
     plot()
     create_video(args.fps, f"{DATA_DIR}/starlink-{DATE_TIME}")

@@ -1,7 +1,7 @@
 FROM python:3.13-slim
 
 RUN apt-get update && apt-get install -y \
-    iputils-ping wget curl && \
+    iputils-ping wget curl ffmpeg unzip && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
@@ -10,6 +10,19 @@ RUN wget https://github.com/fullstorydev/grpcurl/releases/download/v1.9.3/grpcur
     rm grpcurl_1.9.3_linux_amd64.deb
 
 RUN curl -sSL https://install.python-poetry.org | python3 - --version 2.1.1
+
+# Download some NaturalEarth data for cartopy
+ENV CARTOPY_DIR=/usr/local/cartopy-data
+ENV NE_PHYSICAL=${CARTOPY_DIR}/shapefiles/natural_earth/physical
+ENV NE_CULTURAL=${CARTOPY_DIR}/shapefiles/natural_earth/cultural
+RUN mkdir -p ${NE_PHYSICAL} {NE_CULTURAL} && \
+    wget https://naturalearth.s3.amazonaws.com/10m_physical/ne_10m_coastline.zip -P ${CARTOPY_DIR} && \
+    unzip ${CARTOPY_DIR}/ne_10m_coastline.zip -d ${NE_PHYSICAL} && \
+    wget https://naturalearth.s3.amazonaws.com/50m_cultural/ne_50m_admin_1_states_provinces_lakes.zip -P ${CARTOPY_DIR} && \
+    unzip ${CARTOPY_DIR}/ne_50m_admin_1_states_provinces_lakes.zip -d ${NE_CULTURAL} && \
+    wget https://naturalearth.s3.amazonaws.com/50m_cultural/ne_50m_admin_0_boundary_lines_land.zip -P ${CARTOPY_DIR} && \
+    unzip ${CARTOPY_DIR}/ne_50m_admin_0_boundary_lines_land.zip -d ${NE_CULTURAL} && \
+    rm ${CARTOPY_DIR}/*.zip
 
 WORKDIR /app
 ENV PATH="$PATH:/root/.local/bin"
