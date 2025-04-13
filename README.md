@@ -18,6 +18,12 @@ Table of Contents
 
 *(Click to watch the video)*
 
+Currently, this implementation provides a *record-and-replay* visualization of the connected satellites and other measurement metrics. It is possible to implement a (near) real-time visualization, with adjustments to the [satellites.py](./starlink/satellites.py), which might be supported in the future.
+
+**Help Wanted**
+
+With a (near) real-time calculation of connected satellites, one can integrate the [starlink_exporter](https://github.com/clarkzjw/starlink_exporter) Grafana dashboard with [CesiumJS](https://cesium.com/platform/cesiumjs/) such as https://grafana.com/grafana/plugins/satellogic-3d-globe-panel/.
+
 ## How to
 
 ### Prerequisites
@@ -28,7 +34,7 @@ Table of Contents
 
   OCI containers such as Podman might work, but it is not tested.
 
-A pre-built Docker image for `linux/amd64` is available at [docker.io/clarkzjw/leoviz:starlink](https://hub.docker.com/r/clarkzjw/leoviz/tags).
+  A pre-built Docker image for `linux/amd64` is available at [docker.io/clarkzjw/leoviz:starlink](https://hub.docker.com/r/clarkzjw/leoviz/tags).
 
 + Starlink dish firmware `2025.04.08.cr53207` or later
 
@@ -115,7 +121,7 @@ Timestamp,Y,X,Elevation,Azimuth,Connected_Satellite,Distance
 ...
 ```
 
-`obstruction_map-2025-04-13-06-33-18.mp4` shows the instantaneous obstruction map of your dish and the satellite trajectories within each 15-second timeslot. The measurement script clears the obstruction map data every 15 seconds to reliably estimate the connected satellites.
+`obstruction_map-*.mp4` shows the instantaneous obstruction map of your dish and the satellite trajectories within each 15-second timeslot. The measurement script clears the obstruction map data every 15 seconds to reliably estimate the connected satellites.
 
 **Note**
 
