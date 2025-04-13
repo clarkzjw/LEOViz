@@ -1,0 +1,28 @@
+FROM python:3.13-slim
+
+RUN apt-get update && apt-get install -y \
+    iputils-ping wget curl && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN wget https://github.com/fullstorydev/grpcurl/releases/download/v1.9.3/grpcurl_1.9.3_linux_amd64.deb && \
+    dpkg -i grpcurl_1.9.3_linux_amd64.deb && \
+    rm grpcurl_1.9.3_linux_amd64.deb
+
+RUN curl -sSL https://install.python-poetry.org | python3 - --version 2.1.1
+
+WORKDIR /app
+ENV PATH="$PATH:/root/.local/bin"
+
+COPY pyproject.toml .
+COPY poetry.lock .
+
+RUN poetry install
+
+COPY starlink /app/starlink/
+
+WORKDIR /app/starlink
+
+VOLUME /app/starlink/data
+
+CMD ["poetry", "run", "python3", "main.py"]

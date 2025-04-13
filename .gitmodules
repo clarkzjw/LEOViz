@@ -1,3 +1,4 @@
 [submodule "starlink/starlink-grpc-tools"]
 	path = starlink/starlink-grpc-tools
 	url = https://github.com/sparky8512/starlink-grpc-tools.git
+	ignore = dirty
