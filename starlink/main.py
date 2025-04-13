@@ -18,7 +18,7 @@ schedule.every(1).hours.at(":00").do(run, icmp_ping).tag("Latency")
 schedule.every(1).hours.at(":00").do(run, grpc_get_status).tag("gRPC")
 schedule.every(1).hours.at(":00").do(run, get_obstruction_map).tag("gRPC")
 schedule.every(1).hours.at(":00").do(run, get_sinr).tag("gRPC")
-schedule.every(6).hours.at(":00").do(run, load_tle).tag("TLE")
+schedule.every(1).hours.at(":00").do(run, load_tle).tag("TLE")
 
 
 if __name__ == "__main__":
