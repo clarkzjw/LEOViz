@@ -25,3 +25,13 @@ location = {Washington, DC, USA},
 series = {LEO-NET '24}
 }
 ```
+
+## OneWeb
+
+![](./static/oneweb.png)
+
+The measurement scripts are compatible and tested with the following OneWeb user terminals
+
++ Hughes HL1120
+
+⚠️ **To be added.**

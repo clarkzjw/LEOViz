@@ -330,6 +330,18 @@ def create_video(fps, filename):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="LEOViz | Starlink metrics collection")
 
+    parser.add_argument(
+        "--dir",
+        type=str,
+        default="./data",
+        help="Directory with measurement results",
+    )
+    parser.add_argument(
+        "--id",
+        type=str,
+        required=True,
+        help="Experiment ID in the data directory, format: YYYY-MM-DD-HH-mm-ss, e.g., 2025-04-13-04-00-00",
+    )
     parser.add_argument("--lat", type=float, required=True, help="Dish latitude")
     parser.add_argument("--lon", type=float, required=True, help="Dish longitude")
     parser.add_argument(
@@ -344,5 +356,5 @@ if __name__ == "__main__":
             central_longitude=centralLon, central_latitude=centralLat
         )
 
-    # plot()
+    plot()
     create_video(args.fps, f"{DATA_DIR}/starlink-{DATE_TIME}")
