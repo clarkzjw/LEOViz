@@ -37,12 +37,12 @@ def pre_process_observed_data(filename, frame_type, df_sinr):
         elif frame_type_str == "FRAME_UT":
             dx, dy = point["X"] - observer_x, point["Y"] - observer_y
         radius = np.sqrt(dx**2 + dy**2) * pixel_to_degrees
+        azimuth = np.degrees(np.arctan2(dx, dy))
         if frame_type_str == "FRAME_EARTH":
-            azimuth = np.degrees(np.arctan2(dx, dy))
+            azimuth = (azimuth + 360) % 360
         elif frame_type_str == "FRAME_UT":
             azimuth = (azimuth + _rotation_az + 360) % 360
         # Normalize the azimuth to ensure it's within 0 to 360 degrees
-        azimuth = (azimuth + 360) % 360
         elevation = 90 - radius
         positions.append(
             (point["Timestamp"], point["Y"], point["X"], elevation, azimuth)
