@@ -1,6 +1,7 @@
 # flake8: noqa: E501
 
 import os
+import csv
 import sys
 import json
 import time
@@ -76,16 +77,43 @@ def get_sinr():
     try:
         with open(FILENAME, "w") as outfile:
             start = time.time()
-            outfile.write("timestamp,sinr\n")
+            csv_writer = csv.writer(outfile)
+            csv_writer.writerow(
+                [
+                    "timestamp",
+                    "sinr",
+                    "tiltAngleDeg",
+                    "boresightAzimuthDeg",
+                    "boresightElevationDeg",
+                    "attitudeEstimationState",
+                    "attitudeUncertaintyDeg",
+                    "desiredBoresightAzimuthDeg",
+                    "desiredBoresightElevationDeg",
+                ]
+            )
             while time.time() < start + DURATION_SECONDS:
                 output = subprocess.check_output(cmd, timeout=GRPC_TIMEOUT)
                 data = json.loads(output.decode("utf-8"))
                 if (
                     data["dishGetStatus"] is not None
                     and "phyRxBeamSnrAvg" in data["dishGetStatus"]
+                    and "alignmentStats" in data["dishGetStatus"]
                 ):
                     sinr = data["dishGetStatus"]["phyRxBeamSnrAvg"]
-                    outfile.write(f"{time.time()},{sinr}\n")
+                    alignment = data["dishGetStatus"]["alignmentStats"]
+                    csv_writer.writerow(
+                        [
+                            time.time(),
+                            sinr,
+                            alignment["tiltAngleDeg"],
+                            alignment["boresightAzimuthDeg"],
+                            alignment["boresightElevationDeg"],
+                            alignment["attitudeEstimationState"],
+                            alignment["attitudeUncertaintyDeg"],
+                            alignment["desiredBoresightAzimuthDeg"],
+                            alignment["desiredBoresightElevationDeg"],
+                        ]
+                    )
                     outfile.flush()
                     time.sleep(0.5)
     except subprocess.TimeoutExpired:
@@ -103,6 +131,18 @@ def wait_until_target_time():
         time.sleep(0.5)
 
 
+def get_obstruction_map_frame_type():
+    context = starlink_grpc.ChannelContext(target=STARLINK_GRPC_ADDR_PORT)
+    map = starlink_grpc.get_obstruction_map(context)
+    if map.map_reference_frame == 0:
+        frame_type = "UNKNOWN"
+    elif map.map_reference_frame == 1:
+        frame_type = "FRAME_EARTH"
+    elif map.map_reference_frame == 2:
+        frame_type = "FRAME_UT"
+    return map.map_reference_frame, frame_type
+
+
 def get_obstruction_map():
     name = "GRPC_GetObstructionMap"
     logger.info("{}, {}".format(name, threading.current_thread()))
@@ -111,6 +151,8 @@ def get_obstruction_map():
     date = ensure_data_directory(GRPC_DATA_DIR)
     FILENAME = "{}/{}/obstruction_map-{}.parquet".format(GRPC_DATA_DIR, date, dt_string)
     TIMESLOT_DURATION = 14
+
+    frame_type_int, frame_type_str = get_obstruction_map_frame_type()
 
     start = time.time()
     obstruction_data_array = []
@@ -141,6 +183,7 @@ def get_obstruction_map():
     df = pd.DataFrame(
         {
             "timestamp": timestamp_array,
+            "frame_type": frame_type_int,
             "obstruction_map": obstruction_data_array,
         }
     )

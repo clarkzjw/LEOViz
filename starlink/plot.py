@@ -22,7 +22,7 @@ from util import load_ping, load_tle_from_file, load_connected_satellites
 from pop import get_pop_data
 from pprint import pprint
 
-FRAME_TYPE = "FRAME_EARTH"
+FRAME_TYPE = ""
 POP_DATA = None
 
 centralLat = None

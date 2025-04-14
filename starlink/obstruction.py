@@ -9,8 +9,6 @@ import cv2
 import pandas as pd
 import numpy as np
 
-FRAME_TYPE = "FRAME_EARTH"
-
 
 def process_obstruction_maps(df_obstruction_map, uuid):
     start_time_dt = datetime.fromtimestamp(
