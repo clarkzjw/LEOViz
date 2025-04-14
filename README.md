@@ -77,7 +77,7 @@ Loaded 7206 Starlink TLE satellites
 ...
 [2025-04-13 06:35:12,481] [INFO] clearing obstruction map data
 [2025-04-13 06:35:18,793] [INFO] save rtt measurement to data/latency/2025-04-13/ping-10ms-2m-2025-04-13-06-33-18.txt
-[2025-04-13 06:35:19,728] [INFO] save sinr measurement to data/grpc/2025-04-13/PhyRxBeamSnrAvg-2025-04-13-06-33-18.csv
+[2025-04-13 06:35:19,728] [INFO] save sinr measurement to data/grpc/2025-04-13/GRPC_STATUS-2025-04-13-06-33-18.csv
 [2025-04-13 06:35:27,605] [INFO] saved obstruction map data to data/grpc/2025-04-13/obstruction_map-2025-04-13-06-33-18.parquet
 2025-04-13 06:33:27.607699+00:00
 ...
@@ -99,7 +99,7 @@ If successful, you will see the following files in the `data` directory:
     │   └── 2025-04-13
     │       ├── GetStatus-2025-04-13-06-33-18.txt
     │       ├── obstruction_map-2025-04-13-06-33-18.parquet
-    │       └── PhyRxBeamSnrAvg-2025-04-13-06-33-18.csv
+    │       └── GRPC_STATUS-2025-04-13-06-33-18.csv
     ├── latency
     │   └── 2025-04-13
     │       └── ping-10ms-2025-04-13-06-33-18.txt

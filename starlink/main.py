@@ -6,7 +6,11 @@ import schedule
 
 import config
 from latency import icmp_ping
-from dish import grpc_get_status, get_sinr, get_obstruction_map
+from dish import (
+    grpc_get_status,
+    get_sinr,
+    get_obstruction_map,
+)
 from util import run, load_tle
 from config import print_config
 

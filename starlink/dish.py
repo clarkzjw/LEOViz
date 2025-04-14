@@ -1,6 +1,7 @@
 # flake8: noqa: E501
 
 import os
+import csv
 import sys
 import json
 import time
@@ -61,7 +62,7 @@ def get_sinr():
     name = "GRPC_phyRxBeamSnrAvg"
     logger.info("{}, {}".format(name, threading.current_thread()))
 
-    FILENAME = "{}/{}/PhyRxBeamSnrAvg-{}.csv".format(
+    FILENAME = "{}/{}/GRPC_STATUS-{}.csv".format(
         GRPC_DATA_DIR, ensure_data_directory(GRPC_DATA_DIR), date_time_string()
     )
 
@@ -76,16 +77,53 @@ def get_sinr():
     try:
         with open(FILENAME, "w") as outfile:
             start = time.time()
-            outfile.write("timestamp,sinr\n")
+            csv_writer = csv.writer(outfile)
+            csv_writer.writerow(
+                [
+                    "timestamp",
+                    "sinr",
+                    "popPingLatencyMs",
+                    "downlinkThroughputBps",
+                    "uplinkThroughputBps",
+                    "tiltAngleDeg",
+                    "boresightAzimuthDeg",
+                    "boresightElevationDeg",
+                    "attitudeEstimationState",
+                    "attitudeUncertaintyDeg",
+                    "desiredBoresightAzimuthDeg",
+                    "desiredBoresightElevationDeg",
+                ]
+            )
             while time.time() < start + DURATION_SECONDS:
                 output = subprocess.check_output(cmd, timeout=GRPC_TIMEOUT)
                 data = json.loads(output.decode("utf-8"))
                 if (
                     data["dishGetStatus"] is not None
                     and "phyRxBeamSnrAvg" in data["dishGetStatus"]
+                    and "alignmentStats" in data["dishGetStatus"]
                 ):
                     sinr = data["dishGetStatus"]["phyRxBeamSnrAvg"]
-                    outfile.write(f"{time.time()},{sinr}\n")
+                    alignment = data["dishGetStatus"]["alignmentStats"]
+                    status = data["dishGetStatus"]
+                    popPingLatencyMs = status.get("popPingLatencyMs", 0)
+                    dlThroughputBps = status.get("downlinkThroughputBps", 0)
+                    upThroughputBps = status.get("uplinkThroughputBps", 0)
+                    csv_writer.writerow(
+                        [
+                            time.time(),
+                            sinr,
+                            popPingLatencyMs,
+                            dlThroughputBps,
+                            upThroughputBps,
+                            alignment["tiltAngleDeg"],
+                            alignment["boresightAzimuthDeg"],
+                            alignment["boresightElevationDeg"],
+                            alignment["attitudeEstimationState"],
+                            alignment["attitudeUncertaintyDeg"],
+                            alignment["desiredBoresightAzimuthDeg"],
+                            alignment["desiredBoresightElevationDeg"],
+                        ]
+                    )
                     outfile.flush()
                     time.sleep(0.5)
     except subprocess.TimeoutExpired:
@@ -103,6 +141,18 @@ def wait_until_target_time():
         time.sleep(0.5)
 
 
+def get_obstruction_map_frame_type():
+    context = starlink_grpc.ChannelContext(target=STARLINK_GRPC_ADDR_PORT)
+    map = starlink_grpc.get_obstruction_map(context)
+    if map.map_reference_frame == 0:
+        frame_type = "UNKNOWN"
+    elif map.map_reference_frame == 1:
+        frame_type = "FRAME_EARTH"
+    elif map.map_reference_frame == 2:
+        frame_type = "FRAME_UT"
+    return map.map_reference_frame, frame_type
+
+
 def get_obstruction_map():
     name = "GRPC_GetObstructionMap"
     logger.info("{}, {}".format(name, threading.current_thread()))
@@ -111,6 +161,8 @@ def get_obstruction_map():
     date = ensure_data_directory(GRPC_DATA_DIR)
     FILENAME = "{}/{}/obstruction_map-{}.parquet".format(GRPC_DATA_DIR, date, dt_string)
     TIMESLOT_DURATION = 14
+
+    frame_type_int, frame_type_str = get_obstruction_map_frame_type()
 
     start = time.time()
     obstruction_data_array = []
@@ -141,6 +193,7 @@ def get_obstruction_map():
     df = pd.DataFrame(
         {
             "timestamp": timestamp_array,
+            "frame_type": frame_type_int,
             "obstruction_map": obstruction_data_array,
         }
     )
@@ -153,20 +206,30 @@ def get_obstruction_map():
 
     process_obstruction_maps(df, dt_string)
     create_obstruction_map_video(df, dt_string, 5)
+
     print("start: ", df.iloc[0]["timestamp"])
     print("end: ", df.iloc[-1]["timestamp"])
 
     if config.LATITUDE and config.LONGITUDE and config.ALTITUDE:
+        SINR_FILENAME = "{}/{}/GRPC_STATUS-{}.csv".format(
+            GRPC_DATA_DIR, date, dt_string
+        )
+        df_sinr = pd.read_csv(SINR_FILENAME)
         estimate_connected_satellites(
-            dt_string, date, df.iloc[0]["timestamp"], df.iloc[-1]["timestamp"]
+            dt_string,
+            date,
+            frame_type_int,
+            df_sinr,
+            df.iloc[0]["timestamp"],
+            df.iloc[-1]["timestamp"],
         )
 
 
-def estimate_connected_satellites(uuid, date, start, end):
+def estimate_connected_satellites(uuid, date, frame_type, df_sinr, start, end):
     start_ts = datetime.fromtimestamp(start, tz=timezone.utc)
     end_ts = datetime.fromtimestamp(end, tz=timezone.utc)
 
-    convert_observed(DATA_DIR, f"obstruction-data-{uuid}.csv")
+    convert_observed(DATA_DIR, f"obstruction-data-{uuid}.csv", frame_type, df_sinr)
 
     filename = f"{DATA_DIR}/obstruction-data-{uuid}.csv"
     merged_data_file = f"{DATA_DIR}/processed_obstruction-data-{uuid}.csv"
@@ -191,6 +254,7 @@ def estimate_connected_satellites(uuid, date, start, end):
         end_ts.second,
         merged_data_file,
         satellites,
+        frame_type,
     )
 
     merged_data_df = pd.read_csv(merged_data_file, parse_dates=["Timestamp"])
