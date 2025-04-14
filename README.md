@@ -207,3 +207,7 @@ The measurement scripts are compatible and tested with the following OneWeb user
 + Hughes HL1120
 
 ⚠️ **To be added.**
+
+## LICENSE
+
+[GNU General Public License v3.0](./LICENSE)
