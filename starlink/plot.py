@@ -65,9 +65,9 @@ def plot_once(row, df_obstruction_map, df_rtt, df_sinr, all_satellites):
     if frame_type_int == 0:
         FRAME_TYPE = "UNKNOWN"
     elif frame_type_int == 1:
-        FRAME_TYPE = "EARTH"
+        FRAME_TYPE = "FRAME_EARTH"
     elif frame_type_int == 2:
-        FRAME_TYPE = "UT"
+        FRAME_TYPE = "FRAME_UT"
 
     currentObstructionMap = get_obstruction_map_by_timestamp(
         df_obstruction_map, timestamp_str
@@ -129,7 +129,7 @@ def plot_once(row, df_obstruction_map, df_rtt, df_sinr, all_satellites):
                 name,
                 transform=projPlateCarree,
                 fontsize=10,
-                color="black",
+                color="red",
                 wrap=True,
                 clip_on=True,
             )
