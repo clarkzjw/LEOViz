@@ -62,7 +62,7 @@ def get_sinr():
     name = "GRPC_phyRxBeamSnrAvg"
     logger.info("{}, {}".format(name, threading.current_thread()))
 
-    FILENAME = "{}/{}/PhyRxBeamSnrAvg-{}.csv".format(
+    FILENAME = "{}/{}/GRPC_STATUS-{}.csv".format(
         GRPC_DATA_DIR, ensure_data_directory(GRPC_DATA_DIR), date_time_string()
     )
 
@@ -82,6 +82,9 @@ def get_sinr():
                 [
                     "timestamp",
                     "sinr",
+                    "popPingLatencyMs",
+                    "downlinkThroughputBps",
+                    "uplinkThroughputBps",
                     "tiltAngleDeg",
                     "boresightAzimuthDeg",
                     "boresightElevationDeg",
@@ -101,10 +104,17 @@ def get_sinr():
                 ):
                     sinr = data["dishGetStatus"]["phyRxBeamSnrAvg"]
                     alignment = data["dishGetStatus"]["alignmentStats"]
+                    status = data["dishGetStatus"]
+                    popPingLatencyMs = status.get("popPingLatencyMs", 0)
+                    dlThroughputBps = status.get("downlinkThroughputBps", 0)
+                    upThroughputBps = status.get("uplinkThroughputBps", 0)
                     csv_writer.writerow(
                         [
                             time.time(),
                             sinr,
+                            popPingLatencyMs,
+                            dlThroughputBps,
+                            upThroughputBps,
                             alignment["tiltAngleDeg"],
                             alignment["boresightAzimuthDeg"],
                             alignment["boresightElevationDeg"],
@@ -201,7 +211,7 @@ def get_obstruction_map():
     print("end: ", df.iloc[-1]["timestamp"])
 
     if config.LATITUDE and config.LONGITUDE and config.ALTITUDE:
-        SINR_FILENAME = "{}/{}/PhyRxBeamSnrAvg-{}.csv".format(
+        SINR_FILENAME = "{}/{}/GRPC_STATUS-{}.csv".format(
             GRPC_DATA_DIR, date, dt_string
         )
         df_sinr = pd.read_csv(SINR_FILENAME)
