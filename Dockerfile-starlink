@@ -1,13 +1,19 @@
-FROM python:3.13-slim
+FROM python:3.11-slim
 
 RUN apt-get update && apt-get install -y \
     iputils-ping wget curl ffmpeg unzip && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-RUN wget https://github.com/fullstorydev/grpcurl/releases/download/v1.9.3/grpcurl_1.9.3_linux_amd64.deb && \
-    dpkg -i grpcurl_1.9.3_linux_amd64.deb && \
-    rm grpcurl_1.9.3_linux_amd64.deb
+RUN ARCH=$(dpkg --print-architecture) && \
+    case ${ARCH} in \
+      amd64) GRPCURL_ARCH="linux_amd64" ;; \
+      arm64) GRPCURL_ARCH="linux_arm64" ;; \
+      *) echo "Unsupported architecture: ${ARCH}" && exit 1 ;; \
+    esac && \
+    wget https://github.com/fullstorydev/grpcurl/releases/download/v1.9.3/grpcurl_1.9.3_${GRPCURL_ARCH}.deb && \
+    dpkg -i grpcurl_1.9.3_${GRPCURL_ARCH}.deb && \
+    rm grpcurl_1.9.3_${GRPCURL_ARCH}.deb
 
 RUN curl -sSL https://install.python-poetry.org | python3 - --version 2.1.1
 
