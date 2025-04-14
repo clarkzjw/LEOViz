@@ -22,7 +22,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           platforms: linux/amd64,linux/arm64
-          file: Dockerfile-starlink
           context: .
+          file: Dockerfile-starlink
           push: true
-          tags: ${{ secrets.DOCKER_USERNAME }}/${{ github.event.repository.name }}:starlink
+          tags: ${{ secrets.DOCKER_USERNAME }}/leoviz:starlink
