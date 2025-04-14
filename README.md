@@ -1,5 +1,7 @@
 # LEOViz
 
+[![ci](https://github.com/clarkzjw/LEOViz/actions/workflows/build.yaml/badge.svg)](https://github.com/clarkzjw/LEOViz/actions/workflows/build.yaml)
+
 ⚠️ This repository provides a Proof-of-Concept implementation to visualize the connected satellites, SINR and network latency of Starlink and OneWeb user terminals. The implementation is not optimized and is intended for research purposes only.
 
 Table of Contents

@@ -2,8 +2,6 @@ name: ci
 
 on:
   push:
-    branches:
-      - master
     tags:
       - v*
 
@@ -25,12 +23,12 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
         with:
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
 
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           context: .
           file: Dockerfile-starlink
           push: true
