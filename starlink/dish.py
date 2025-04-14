@@ -196,20 +196,30 @@ def get_obstruction_map():
 
     process_obstruction_maps(df, dt_string)
     create_obstruction_map_video(df, dt_string, 5)
+
     print("start: ", df.iloc[0]["timestamp"])
     print("end: ", df.iloc[-1]["timestamp"])
 
     if config.LATITUDE and config.LONGITUDE and config.ALTITUDE:
+        SINR_FILENAME = "{}/{}/PhyRxBeamSnrAvg-{}.csv".format(
+            GRPC_DATA_DIR, date, dt_string
+        )
+        df_sinr = pd.read_csv(SINR_FILENAME)
         estimate_connected_satellites(
-            dt_string, date, df.iloc[0]["timestamp"], df.iloc[-1]["timestamp"]
+            dt_string,
+            date,
+            frame_type_int,
+            df_sinr,
+            df.iloc[0]["timestamp"],
+            df.iloc[-1]["timestamp"],
         )
 
 
-def estimate_connected_satellites(uuid, date, start, end):
+def estimate_connected_satellites(uuid, date, frame_type, df_sinr, start, end):
     start_ts = datetime.fromtimestamp(start, tz=timezone.utc)
     end_ts = datetime.fromtimestamp(end, tz=timezone.utc)
 
-    convert_observed(DATA_DIR, f"obstruction-data-{uuid}.csv")
+    convert_observed(DATA_DIR, f"obstruction-data-{uuid}.csv", frame_type, df_sinr)
 
     filename = f"{DATA_DIR}/obstruction-data-{uuid}.csv"
     merged_data_file = f"{DATA_DIR}/processed_obstruction-data-{uuid}.csv"
@@ -234,6 +244,7 @@ def estimate_connected_satellites(uuid, date, start, end):
         end_ts.second,
         merged_data_file,
         satellites,
+        frame_type,
     )
 
     merged_data_df = pd.read_csv(merged_data_file, parse_dates=["Timestamp"])

@@ -22,7 +22,6 @@ from util import load_ping, load_tle_from_file, load_connected_satellites
 from pop import get_pop_data
 from pprint import pprint
 
-FRAME_TYPE = ""
 POP_DATA = None
 
 centralLat = None
@@ -62,6 +61,14 @@ def plot_once(row, df_obstruction_map, df_rtt, df_sinr, all_satellites):
     # axObstructionMapCumulative = fig.add_subplot(gs00[3, 0])
     axObstructionMapInstantaneous = fig.add_subplot(gs00[3, :])
 
+    frame_type_int = df_obstruction_map["frame_type"].iloc[0]
+    if frame_type_int == 0:
+        FRAME_TYPE = "UNKNOWN"
+    elif frame_type_int == 1:
+        FRAME_TYPE = "EARTH"
+    elif frame_type_int == 2:
+        FRAME_TYPE = "UT"
+
     currentObstructionMap = get_obstruction_map_by_timestamp(
         df_obstruction_map, timestamp_str
     )
@@ -70,7 +77,7 @@ def plot_once(row, df_obstruction_map, df_rtt, df_sinr, all_satellites):
         cmap="gray",
     )
     axObstructionMapInstantaneous.set_title(
-        f"Instantaneous gRPC obstruction map, frame type: {FRAME_TYPE}"
+        f"Instantaneous gRPC obstruction map in current timeslot, frame type: {FRAME_TYPE}"
     )
 
     axSat.set_extent(

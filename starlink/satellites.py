@@ -1,5 +1,6 @@
 # flake8: noqa:E501
 
+import math
 import config
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -9,18 +10,37 @@ import numpy as np
 from skyfield.api import load, wgs84, utc
 
 
-def pre_process_observed_data(filename):
+def pre_process_observed_data(filename, frame_type, df_sinr):
     data = pd.read_csv(filename, sep=",", header=None, names=["Timestamp", "Y", "X"])
     data["Timestamp"] = pd.to_datetime(data["Timestamp"], utc=True)
 
-    observer_x, observer_y = 62, 62  # Assume this is the observer's pixel location
+    if frame_type == 1:
+        frame_type_str = "FRAME_EARTH"
+    elif frame_type == 2:
+        frame_type_str = "FRAME_UT"
+    else:
+        frame_type_str = "UNKNOWN"
+
+    _tilt = df_sinr["tiltAngleDeg"].iloc[0]
+    _rotation_az = df_sinr["boresightAzimuthDeg"].iloc[0]
+
+    if frame_type_str == "FRAME_EARTH":
+        observer_x, observer_y = 62, 62  # Assume this is the observer's pixel location
+    elif frame_type_str == "FRAME_UT":
+        observer_x, observer_y = 62, 62 - (_tilt / (80 / 62))
     pixel_to_degrees = 80 / 62  # Conversion factor from pixel to degrees
 
     positions = []
     for index, point in data.iterrows():
-        dx, dy = point["X"] - observer_x, (123 - point["Y"]) - observer_y
+        if frame_type_str == "FRAME_EARTH":
+            dx, dy = point["X"] - observer_x, (123 - point["Y"]) - observer_y
+        elif frame_type_str == "FRAME_UT":
+            dx, dy = point["X"] - observer_x, point["Y"] - observer_y
         radius = np.sqrt(dx**2 + dy**2) * pixel_to_degrees
-        azimuth = np.degrees(np.arctan2(dx, dy))
+        if frame_type_str == "FRAME_EARTH":
+            azimuth = np.degrees(np.arctan2(dx, dy))
+        elif frame_type_str == "FRAME_UT":
+            azimuth = (azimuth + _rotation_az + 360) % 360
         # Normalize the azimuth to ensure it's within 0 to 360 degrees
         azimuth = (azimuth + 360) % 360
         elevation = 90 - radius
@@ -34,8 +54,10 @@ def pre_process_observed_data(filename):
     return df_positions
 
 
-def convert_observed(dir, filename):
-    observed_positions = pre_process_observed_data(Path(dir).joinpath(filename))
+def convert_observed(dir, filename, frame_type, df_sinr):
+    observed_positions = pre_process_observed_data(
+        Path(dir).joinpath(filename), frame_type, df_sinr
+    )
     if not observed_positions.empty:
         observed_positions.to_csv(
             Path(dir).joinpath(f"processed_{filename}"), index=False
@@ -161,8 +183,65 @@ def calculate_total_difference(observed_positions, satellite_positions):
     return total_difference
 
 
+def azimuth_difference(az1, az2):
+    """Calculate the smallest difference between two azimuth angles."""
+    diff = abs(az1 - az2) % 360
+    if diff > 180:
+        diff = 360 - diff
+    return diff
+
+
+def calculate_direction_vector(point1, point2):
+    """Calculate the direction vector from point1 to point2."""
+    alt_diff = point2[0] - point1[0]
+    az_diff = azimuth_difference(point2[1], point1[1])
+    magnitude = math.sqrt(alt_diff**2 + az_diff**2)
+    return (alt_diff / magnitude, az_diff / magnitude) if magnitude != 0 else (0, 0)
+
+
+def calculate_trajectory_distance_frame_ut(observed_positions, satellite_positions):
+    """Calculate the distance measure between observed and satellite trajectories."""
+    altitude_range = 90.0  # Maximum possible altitude difference
+    azimuth_range = 180.0  # Maximum possible azimuth difference
+    direction_range = 2.0  # Maximum possible direction difference
+
+    distance = 0
+    for i in range(len(observed_positions)):
+        # Calculate distance between points
+        alt_deviation = (
+            abs(observed_positions[i][0] - satellite_positions[i][0]) / altitude_range
+        )
+        az_deviation = (
+            azimuth_difference(observed_positions[i][1], satellite_positions[i][1])
+            / azimuth_range
+        )
+        distance += alt_deviation + az_deviation
+
+    # Calculate the overall direction vectors
+    obs_dir_vector = calculate_direction_vector(
+        observed_positions[0], observed_positions[-1]
+    )
+    sat_dir_vector = calculate_direction_vector(
+        satellite_positions[0], satellite_positions[len(observed_positions) - 1]
+    )
+
+    # Calculate direction difference
+    direction_diff = (
+        math.sqrt(
+            (obs_dir_vector[0] - sat_dir_vector[0]) ** 2
+            + (obs_dir_vector[1] - sat_dir_vector[1]) ** 2
+        )
+        / direction_range
+    )
+
+    # Add the direction difference to the distance measure
+    total_distance = distance + direction_diff
+
+    return total_distance
+
+
 def find_matching_satellites(
-    satellites, observer_location, observed_positions_with_timestamps
+    satellites, observer_location, observed_positions_with_timestamps, frame_type
 ):
     best_match = None
     closest_total_difference = float("inf")
@@ -193,13 +272,22 @@ def find_matching_satellites(
             satellite_positions.append((alt.degrees, az.degrees))
 
         if valid_positions:
-            total_difference = calculate_total_difference(
-                [
-                    (90 - data[0], data[1])
-                    for _, data in observed_positions_with_timestamps
-                ],
-                satellite_positions,
-            )
+            if frame_type == 1:  # FRAME_EARTH
+                total_difference = calculate_total_difference(
+                    [
+                        (90 - data[0], data[1])
+                        for _, data in observed_positions_with_timestamps
+                    ],
+                    satellite_positions,
+                )
+            elif frame_type == 2:  # FRAME_UT
+                total_difference = calculate_trajectory_distance_frame_ut(
+                    [
+                        (90 - data[0], data[1])
+                        for _, data in observed_positions_with_timestamps
+                    ],
+                    satellite_positions,
+                )
             # print(satellite.name, ": ", total_difference)
             if total_difference < closest_total_difference:
                 closest_total_difference = total_difference
@@ -223,7 +311,16 @@ def calculate_distance_for_best_match(
 
 
 def process(
-    filename, year, month, day, hour, minute, second, merged_data_file, satellites
+    filename,
+    year,
+    month,
+    day,
+    hour,
+    minute,
+    second,
+    merged_data_file,
+    satellites,
+    frame_type,
 ):
     initial_time = set_observation_time(year, month, day, hour, minute, second)
     observer_location = wgs84.latlon(
@@ -239,7 +336,7 @@ def process(
         return [], [], []
 
     matching_satellites = find_matching_satellites(
-        satellites, observer_location, observed_positions_with_timestamps
+        satellites, observer_location, observed_positions_with_timestamps, frame_type
     )
     if not matching_satellites:
         return observed_positions_with_timestamps, [], []
@@ -270,6 +367,7 @@ def process_intervals(
     end_second,
     merged_data_file,
     satellites,
+    frame_type,
 ):
     results = []
 
@@ -299,6 +397,7 @@ def process_intervals(
             current_time.second,
             merged_data_file,
             satellites,
+            frame_type,
         )
         if matching_satellites:
             for second in range(15):
