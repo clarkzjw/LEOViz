@@ -1,6 +1,8 @@
 # LEOViz
 
-[![ci](https://github.com/clarkzjw/LEOViz/actions/workflows/build.yaml/badge.svg)](https://github.com/clarkzjw/LEOViz/actions/workflows/build.yaml)
+[![ci](https://github.com/clarkzjw/LEOViz/actions/workflows/build.yaml/badge.svg)](https://github.com/clarkzjw/LEOViz/actions/workflows/build.yaml) ![Docker Pulls](https://img.shields.io/docker/pulls/clarkzjw/leoviz)
+ ![Docker Image Size (tag)](https://img.shields.io/docker/image-size/clarkzjw/leoviz/starlink)
+
 
 ⚠️ This repository provides a Proof-of-Concept implementation to visualize the connected satellites, SINR and network latency of Starlink and OneWeb user terminals. The implementation is not optimized and is intended for research purposes only.
 
