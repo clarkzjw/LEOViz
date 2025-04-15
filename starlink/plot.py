@@ -43,6 +43,34 @@ def get_obstruction_map_by_timestamp(df_obstruction_map, timestamp):
     return closest_row["obstruction_map"].reshape(123, 123)
 
 
+def get_starlink_generation_by_norad_id(norad_id):
+    # Exception sub-ranges known to be v2 Mini within v1.5 range
+    v2mini_exceptions = [
+        (57290, 57311),
+        (56823, 56844),
+        (56688, 56709),
+        (56287, 56306),
+    ]
+
+    def in_ranges(id, ranges):
+        return any(start <= id <= end for start, end in ranges)
+
+    # Handle known exceptions first
+    if in_ranges(norad_id, v2mini_exceptions):
+        return "v2 Mini"
+
+    # Default broader ranges
+    if 44714 <= norad_id <= 48696:
+        return "v1.0"
+    elif 48880 <= norad_id <= 57381:
+        return "v1.5"
+    elif 57404 <= norad_id:
+        return "v2 Mini"
+
+    else:
+        return "Unknown"
+
+
 def plot_once(row, df_obstruction_map, df_rtt, df_sinr, all_satellites):
     timestamp_str = row["Timestamp"]
     connected_sat_name = row["Connected_Satellite"]
@@ -52,6 +80,10 @@ def plot_once(row, df_obstruction_map, df_rtt, df_sinr, all_satellites):
         return
 
     print(timestamp_str, connected_sat_name)
+    for sat in all_satellites:
+        if sat.name == connected_sat_name:
+            connected_sat_gen = get_starlink_generation_by_norad_id(sat.model.satnum)
+            break
 
     fig = plt.figure(figsize=(20, 10))
     gs0 = gridspec.GridSpec(1, 2, figure=fig, width_ratios=[5, 5])
@@ -163,7 +195,6 @@ def plot_once(row, df_obstruction_map, df_rtt, df_sinr, all_satellites):
         color="red",
         linestyle="--",
     )
-    axFullRTT.xaxis.set_major_locator(mdates.MinuteLocator(interval=1))
     axFullRTT.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M:%S"))
 
     all_satellites_in_canvas, connected_sat_lat, connected_sat_lon = (
@@ -185,6 +216,7 @@ def plot_once(row, df_obstruction_map, df_rtt, df_sinr, all_satellites):
         connected_sat_name,
         transform=projPlateCarree,
         fontsize=10,
+        color="red",
     )
 
     axSat.plot(
@@ -207,7 +239,7 @@ def plot_once(row, df_obstruction_map, df_rtt, df_sinr, all_satellites):
         )
 
     axSat.set_title(
-        f"Connected satellite: {connected_sat_name}, timestamp: {timestamp_str}"
+        f"Timestamp: {timestamp_str}, Connected satellite: {connected_sat_name}, {connected_sat_gen}"
     )
 
     axSat.legend(loc="upper left")
