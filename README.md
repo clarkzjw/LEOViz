@@ -3,7 +3,6 @@
 [![ci](https://github.com/clarkzjw/LEOViz/actions/workflows/build.yaml/badge.svg)](https://github.com/clarkzjw/LEOViz/actions/workflows/build.yaml) ![Docker Pulls](https://img.shields.io/docker/pulls/clarkzjw/leoviz)
  ![Docker Image Size (tag)](https://img.shields.io/docker/image-size/clarkzjw/leoviz/starlink)
 
-
 ⚠️ This repository provides a Proof-of-Concept implementation to visualize the connected satellites, SINR and network latency of Starlink and OneWeb user terminals. The implementation is not optimized and is intended for research purposes only.
 
 Table of Contents
@@ -28,6 +27,8 @@ Currently, this implementation provides a *record-and-replay* visualization of t
 **Help Wanted**
 
 With a (near) real-time calculation of connected satellites, one can integrate the [starlink_exporter](https://github.com/clarkzjw/starlink_exporter) Grafana dashboard with [CesiumJS](https://cesium.com/platform/cesiumjs/) such as https://grafana.com/grafana/plugins/satellogic-3d-globe-panel/.
+
+🔗 Check out https://oac.uvic.ca/starlink/ for related research and projects.
 
 ## How to
 
@@ -210,6 +211,8 @@ series = {LEO-NET '24}
 [![Video](./static/oneweb.png)](https://onlineacademiccommunity.uvic.ca/oneweb/wp-content/uploads/sites/9326/2025/03/oneweb-2024-12-06-02-36-02.mp4)
 
 *(Click to watch the video)*
+
+🔗 Check out https://oac.uvic.ca/oneweb/ for related research and projects.
 
 The measurement scripts are compatible and tested with the following OneWeb user terminals
 
