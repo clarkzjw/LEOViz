@@ -65,6 +65,8 @@ docker run -it --rm \
   poetry run python3 main.py --run-once --lat LAT --lon LON --alt ALT
 ```
 
+Note that if you have Tailscale installed on the same device that you are going to run this tool, consider running `sudo tailscale up --netfilter-mode=off` to avoid CGNAT conflicts. Otherwise, `100.64.0.1` is not ICMP reachable. Or you can use IPv6 gateway address in `STARLINK_DEFAULT_GW`. You can find out the IPv6 gateway address by running `mtr`/`traceroute`, and it is usually the second hop if the dish is not in bypass mode.
+
 You will see the following message on the terminal:
 
 ```
