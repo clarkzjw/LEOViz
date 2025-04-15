@@ -202,10 +202,6 @@ series = {LEO-NET '24}
 }
 ```
 
-## TODO
-
-- [ ] Annotate the connected satellite generation (e.g., `v2mini`, `v1.5`), by combining [List_of_Starlink_and_Starshield_launches](https://en.wikipedia.org/wiki/List_of_Starlink_and_Starshield_launches) and [List of all Starlink satellites and their orbital history](https://planet4589.org/space/con/star/stats.html).
-
 # OneWeb
 
 [![Video](./static/oneweb.png)](https://onlineacademiccommunity.uvic.ca/oneweb/wp-content/uploads/sites/9326/2025/03/oneweb-2024-12-06-02-36-02.mp4)
