@@ -18,11 +18,13 @@ Table of Contents
 
 # Starlink
 
+**Note that Starlink may have rollbacked the firmware from `2025.04.08.cr53207` to `2025.03.28.mr52463.2`, temporarily removing the `phyRxBeamSnrAvg` field in `get_status` response, thus you might get empty SINR measurement subplots.**
+
+----
+
 [![Video](./static/starlink.png)](https://onlineacademiccommunity.uvic.ca/starlink/wp-content/uploads/sites/8876/2025/04/victoria.mp4)
 
 *(Click to watch the video)*
-
-**Note that Starlink may have rollbacked the firmware from `2025.04.08.cr53207` to `2025.03.28.mr52463.2`, thus temporarily removing the `phyRxBeamSnrAvg` field in `get_status` response**
 
 Currently, this implementation provides a *record-and-replay* visualization of the connected satellites and other measurement metrics. It is possible to implement a (near) real-time visualization, with adjustments to the [satellites.py](./starlink/satellites.py), which might be supported in the future.
 
