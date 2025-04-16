@@ -9,7 +9,7 @@ LATITUDE = None
 LONGITUDE = None
 ALTITUDE = None
 
-IFCE = os.getenv("IFCE", "eth0")
+IFCE = os.getenv("IFCE", "")
 
 STARLINK_GRPC_ADDR_PORT = os.getenv("STARLINK_GRPC_ADDR_PORT", "192.168.100.1:9200")
 STARLINK_DEFAULT_GW = os.getenv("STARLINK_DEFAULT_GW", "100.64.0.1")

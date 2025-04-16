@@ -38,9 +38,9 @@ def icmp_ping() -> None:
         "-c",
         str(COUNT),
         STARLINK_DEFAULT_GW,
-        "-I",
-        IFCE,
     ]
+    if IFCE != "":
+        cmd += ["-I", IFCE]
     try:
         with open(FILENAME, "w") as outfile:
             subprocess.run(cmd, stdout=outfile, timeout=DURATION_SECONDS)
