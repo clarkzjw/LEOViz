@@ -1,10 +1,11 @@
-docker run -it --rm \
+docker run -d \
   -v ./sample-data:/app/starlink/data \
   clarkzjw/leoviz:starlink \
   poetry run python3 plot.py --lat 48 --lon -123 --id 2025-04-15-01-31-27
 
+sleep 120
+
 stat ./sample-data/starlink-2025-04-15-01-31-27.mp4
-echo $?
 
 if [ $? -ne 0 ]; then
   echo "Error: Video file not found or not created."
