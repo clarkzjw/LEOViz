@@ -1,3 +1,4 @@
+.idea/
 run.sh
 __pycache__/
 starlink-grpc-tools/__pycache__/
