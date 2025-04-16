@@ -99,12 +99,15 @@ def get_sinr():
                 data = json.loads(output.decode("utf-8"))
                 if (
                     data["dishGetStatus"] is not None
-                    and "phyRxBeamSnrAvg" in data["dishGetStatus"]
+                    # Starlink may have just rollbacked the firmware
+                    # from 2025.04.08.cr53207 to 2025.03.28.mr52463.2
+                    # thus removing phyRxBeamSnrAvg again
+                    # and "phyRxBeamSnrAvg" in data["dishGetStatus"]
                     and "alignmentStats" in data["dishGetStatus"]
                 ):
-                    sinr = data["dishGetStatus"]["phyRxBeamSnrAvg"]
-                    alignment = data["dishGetStatus"]["alignmentStats"]
                     status = data["dishGetStatus"]
+                    sinr = status.get("phyRxBeamSnrAvg", 0)
+                    alignment = status["alignmentStats"]
                     popPingLatencyMs = status.get("popPingLatencyMs", 0)
                     dlThroughputBps = status.get("downlinkThroughputBps", 0)
                     upThroughputBps = status.get("uplinkThroughputBps", 0)
