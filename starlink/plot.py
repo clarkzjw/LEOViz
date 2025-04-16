@@ -168,34 +168,37 @@ def plot_once(row, df_obstruction_map, df_rtt, df_sinr, all_satellites):
     except Exception as e:
         print(str(e))
 
-    axFullRTT.plot(
-        df_rtt["timestamp"],
-        df_rtt["rtt"],
-        color="blue",
-        label="RTT",
-        linestyle="None",
-        markersize=1,
-        marker=".",
-    )
-    axFullRTT.axvline(
-        x=plot_current,
-        color="red",
-        linestyle="--",
-    )
-    axFullSINR.plot(
-        df_sinr["timestamp"],
-        df_sinr["sinr"],
-        color="blue",
-        label="SINR",
-        marker="x",
-        markersize=2,
-    )
-    axFullSINR.axvline(
-        x=plot_current,
-        color="red",
-        linestyle="--",
-    )
-    axFullRTT.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M:%S"))
+    if not df_rtt.empty:
+        axFullRTT.plot(
+            df_rtt["timestamp"],
+            df_rtt["rtt"],
+            color="blue",
+            label="RTT",
+            linestyle="None",
+            markersize=1,
+            marker=".",
+        )
+        axFullRTT.axvline(
+            x=plot_current,
+            color="red",
+            linestyle="--",
+        )
+        axFullRTT.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M:%S"))
+
+    if not axFullSINR.empty:
+        axFullSINR.plot(
+            df_sinr["timestamp"],
+            df_sinr["sinr"],
+            color="blue",
+            label="SINR",
+            marker="x",
+            markersize=2,
+        )
+        axFullSINR.axvline(
+            x=plot_current,
+            color="red",
+            linestyle="--",
+        )
 
     all_satellites_in_canvas, connected_sat_lat, connected_sat_lon = (
         get_connected_satellite_lat_lon(
@@ -244,62 +247,65 @@ def plot_once(row, df_obstruction_map, df_rtt, df_sinr, all_satellites):
 
     axSat.legend(loc="upper left")
 
-    axFullRTT.set_title("RTT")
-    axFullRTT.set_ylabel("RTT (ms)")
-    axFullRTT.set_xlim(
-        df_rtt.iloc[0]["timestamp"],
-        df_rtt.iloc[-1]["timestamp"],
-    )
-
-    axFullSINR.set_title("SINR")
-    axFullSINR.set_ylabel("SINR (dB)")
+    if not df_rtt.empty:
+        axFullRTT.set_title("RTT")
+        axFullRTT.set_ylabel("RTT (ms)")
+        axFullRTT.set_xlim(
+            df_rtt.iloc[0]["timestamp"],
+            df_rtt.iloc[-1]["timestamp"],
+        )
+    if not df_sinr.empty:
+        axFullSINR.set_title("SINR")
+        axFullSINR.set_ylabel("SINR (dB)")
 
     zoom_start = plot_current - pd.Timedelta(minutes=1)
     zoom_end = plot_current + pd.Timedelta(minutes=1)
 
-    df_rtt_zoomed = df_rtt[
-        (df_rtt["timestamp"] >= zoom_start) & (df_rtt["timestamp"] <= zoom_end)
-    ]
-    df_sinr_zoomed = df_sinr[
-        (df_sinr["timestamp"] >= zoom_start) & (df_sinr["timestamp"] <= zoom_end)
-    ]
+    if not df_rtt.empty:
+        df_rtt_zoomed = df_rtt[
+            (df_rtt["timestamp"] >= zoom_start) & (df_rtt["timestamp"] <= zoom_end)
+        ]
+        axRTT.plot(
+            df_rtt_zoomed["timestamp"],
+            df_rtt_zoomed["rtt"],
+            color="blue",
+            label="RTT",
+            linestyle="None",
+            markersize=1,
+            marker=".",
+        )
+        axRTT.axvline(
+            x=plot_current,
+            color="red",
+            linestyle="--",
+        )
+        axRTT.set_ylim(0, 100)
+        axRTT.set_title(f"RTT at {timestamp_str}")
+        axRTT.set_ylabel("RTT (ms)")
+        axRTT.set_xticklabels([])
 
-    axRTT.plot(
-        df_rtt_zoomed["timestamp"],
-        df_rtt_zoomed["rtt"],
-        color="blue",
-        label="RTT",
-        linestyle="None",
-        markersize=1,
-        marker=".",
-    )
-    axRTT.axvline(
-        x=plot_current,
-        color="red",
-        linestyle="--",
-    )
-    axSINR.plot(
-        df_sinr_zoomed["timestamp"],
-        df_sinr_zoomed["sinr"],
-        color="blue",
-        label="SINR",
-        marker="x",
-        markersize=4,
-    )
-    axSINR.axvline(
-        x=plot_current,
-        color="red",
-        linestyle="--",
-    )
+    if not df_sinr.empty:
+        df_sinr_zoomed = df_sinr[
+            (df_sinr["timestamp"] >= zoom_start) & (df_sinr["timestamp"] <= zoom_end)
+        ]
 
-    axRTT.set_ylim(0, 100)
-    axRTT.set_title(f"RTT at {timestamp_str}")
-    axRTT.set_ylabel("RTT (ms)")
-    axRTT.set_xticklabels([])
+        axSINR.plot(
+            df_sinr_zoomed["timestamp"],
+            df_sinr_zoomed["sinr"],
+            color="blue",
+            label="SINR",
+            marker="x",
+            markersize=4,
+        )
+        axSINR.axvline(
+            x=plot_current,
+            color="red",
+            linestyle="--",
+        )
 
-    axSINR.set_title(f"SINR at {timestamp_str}")
-    axSINR.set_ylabel("SINR (dB)")
-    axSINR.set_xticklabels([])
+        axSINR.set_title(f"SINR at {timestamp_str}")
+        axSINR.set_ylabel("SINR (dB)")
+        axSINR.set_xticklabels([])
 
     plt.tight_layout()
     plt.savefig(f"{FIGURE_DIR}/{timestamp_str}.png")
@@ -331,11 +337,14 @@ def plot():
         f"{DATA_DIR}/serving_satellite_data-{DATE_TIME}.csv"
     )
 
-    df_rtt["timestamp"] = pd.to_datetime(df_rtt["timestamp"], unit="s", utc=True)
-    df_sinr["timestamp"] = pd.to_datetime(df_sinr["timestamp"], unit="s", utc=True)
-    df_obstruction_map["timestamp"] = pd.to_datetime(
-        df_obstruction_map["timestamp"], unit="s", utc=True
-    )
+    if not df_rtt.empty:
+        df_rtt["timestamp"] = pd.to_datetime(df_rtt["timestamp"], unit="s", utc=True)
+    if not df_sinr.empty:
+        df_sinr["timestamp"] = pd.to_datetime(df_sinr["timestamp"], unit="s", utc=True)
+    if not df_obstruction_map.empty:
+        df_obstruction_map["timestamp"] = pd.to_datetime(
+            df_obstruction_map["timestamp"], unit="s", utc=True
+        )
 
     CPU_COUNT = os.cpu_count() - 1 if os.cpu_count() > 1 else 1
     print(f"Process count: {CPU_COUNT}")
