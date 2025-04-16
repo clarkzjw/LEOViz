@@ -185,7 +185,7 @@ def plot_once(row, df_obstruction_map, df_rtt, df_sinr, all_satellites):
         )
         axFullRTT.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M:%S"))
 
-    if not axFullSINR.empty:
+    if not df_sinr.empty:
         axFullSINR.plot(
             df_sinr["timestamp"],
             df_sinr["sinr"],
@@ -351,11 +351,22 @@ def plot():
 
     POP_DATA = get_pop_data(centralLat, centralLon, offsetLat, offsetLon)
     with Pool(CPU_COUNT) as pool:
+        results = []
         for index, row in connected_satellites.iterrows():
-            pool.apply_async(
+            # plot_once(row, df_obstruction_map, df_rtt, df_sinr, all_satellites)
+            result = pool.apply_async(
                 plot_once,
                 args=(row, df_obstruction_map, df_rtt, df_sinr, all_satellites),
             )
+            results.append(result)
+
+        for result in results:
+            try:
+                result.get()
+            except Exception as e:
+                print(f"Error in process: {e}")
+                continue
+
         pool.close()
         pool.join()
 
