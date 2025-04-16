@@ -1,9 +1,16 @@
-name: ci
+name: test
 
 on:
+  pull_request:
+    branches:
+      - master
   push:
+    paths:
+      - '**.py'
     tags:
       - v*
+    branches:
+      - master
 
 jobs:
   build:
@@ -25,11 +32,15 @@ jobs:
         with:
           platforms: linux/amd64
 
-      - name: Build and push
+      - name: Build
         uses: docker/build-push-action@v6
         with:
           platforms: linux/amd64
           context: .
           file: Dockerfile-starlink
-          push: true
+          load: true
           tags: ${{ secrets.DOCKER_USERNAME }}/leoviz:starlink
+
+      - name: Test
+        working-directory: ./tests
+        run: bash run-tests.sh

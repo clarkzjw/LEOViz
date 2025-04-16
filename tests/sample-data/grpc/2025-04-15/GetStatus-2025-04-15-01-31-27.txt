@@ -1,0 +1,98 @@
+{
+  "apiVersion": "31",
+  "dishGetStatus": {
+    "deviceInfo": {
+      "id": "ut01000000-xxxx-xxxx",
+      "hardwareVersion": "rev3_proto2",
+      "softwareVersion": "2025.04.08.cr53207",
+      "countryCode": "CA",
+      "utcOffsetS": -28799,
+      "bootcount": 174,
+      "generationNumber": "1744220881",
+      "buildId": "05de8289-7bcc-476b-ad62-8cf8cc2a73fe.uterm_manifest.release"
+    },
+    "deviceState": {
+      "uptimeS": "398465"
+    },
+    "obstructionStats": {
+      "validS": 7797,
+      "avgProlongedObstructionIntervalS": "NaN",
+      "timeObstructed": 2.565063e-06,
+      "patchesValid": 2892
+    },
+    "alerts": {
+      "obstructionMapReset": true
+    },
+    "downlinkThroughputBps": 177125.45,
+    "uplinkThroughputBps": 360550.75,
+    "popPingLatencyMs": 27.920654,
+    "boresightAzimuthDeg": -0.15117444,
+    "boresightElevationDeg": 62.641766,
+    "gpsStats": {
+      "gpsValid": true,
+      "gpsSats": 16
+    },
+    "ethSpeedMbps": 1000,
+    "isSnrAboveNoiseFloor": true,
+    "readyStates": {
+      "cady": true,
+      "scp": true,
+      "l1l2": true,
+      "xphy": true,
+      "aap": true,
+      "rf": true
+    },
+    "softwareUpdateState": "IDLE",
+    "disablementCode": "OKAY",
+    "hasSignedCals": true,
+    "softwareUpdateStats": {
+      "softwareUpdateState": "IDLE",
+      "softwareUpdateProgress": 1
+    },
+    "alignmentStats": {
+      "tiltAngleDeg": 27.417702,
+      "boresightAzimuthDeg": -0.15117444,
+      "boresightElevationDeg": 62.641766,
+      "attitudeEstimationState": "FILTER_CONVERGED",
+      "attitudeUncertaintyDeg": 0.6019857,
+      "desiredBoresightAzimuthDeg": 0.019119853,
+      "desiredBoresightElevationDeg": 62.99574
+    },
+    "initializationDurationSeconds": {
+      "attitudeInitialization": 36,
+      "burstDetected": 36,
+      "ekfConverged": 36,
+      "firstCplane": 46,
+      "firstPopPing": 98,
+      "gpsValid": 22,
+      "initialNetworkEntry": 36,
+      "networkSchedule": 84,
+      "rfReady": 31,
+      "stableConnection": 1
+    },
+    "secondsUntilSwupdateRebootPossible": -1,
+    "plcStats": {
+      "port1Stats": {},
+      "port2Stats": {},
+      "port3Stats": {}
+    },
+    "upsuStats": {},
+    "dlBandwidthRestrictedReason": "NO_LIMIT",
+    "ulBandwidthRestrictedReason": "NO_LIMIT",
+    "phyRxBeamSnrAvg": 9.845507,
+    "tCenter": 34.79534,
+    "config": {
+      "locationRequestMode": "LOCAL",
+      "swupdateRebootHour": 3,
+      "applySnowMeltMode": true,
+      "applyLocationRequestMode": true,
+      "applyLevelDishMode": true,
+      "applyPowerSaveStartMinutes": true,
+      "applyPowerSaveDurationMinutes": true,
+      "applyPowerSaveMode": true,
+      "applySwupdateThreeDayDeferralEnabled": true,
+      "applyAssetClass": true,
+      "applySwupdateRebootHour": true
+    }
+  }
+}
