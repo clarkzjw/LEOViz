@@ -21,7 +21,7 @@ LATENCY_DATA_DIR = Path(DATA_DIR).joinpath("latency")
 TLE_URL = "https://celestrak.org/NORAD/elements/gp.php?GROUP=starlink&FORMAT=tle"
 
 INTERVAL_MS = os.getenv("INTERVAL", "10ms")
-DURATION = os.getenv("DURATION", "60m")
+DURATION = os.getenv("DURATION", "2m")
 
 TIMEDELTA_REGEX = (
     r"((?P<days>-?\d+)d)?" r"((?P<hours>-?\d+)h)?" r"((?P<minutes>-?\d+)m)?"

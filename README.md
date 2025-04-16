@@ -60,10 +60,6 @@ The first step is to run measurements to collect data, including the Starlink di
 
 ```bash
 docker run -it --rm \
-  -e STARLINK_DEFAULT_GW=100.64.0.1 \
-  -e STARLINK_GRPC_ADDR_PORT=192.168.100.1:9200 \
-  -e IFCE=eth0 \       # replace this with the network interface name connected to Starlink
-  -e DURATION=2m \     # replace with the expected measurement duration
   -v ./data:/app/starlink/data \
   --network host \
   clarkzjw/leoviz:starlink \
@@ -71,6 +67,31 @@ docker run -it --rm \
 ```
 
 Note that if you have Tailscale installed on the same device that you are going to run this tool, consider running `sudo tailscale up --netfilter-mode=off` to avoid CGNAT conflicts. Otherwise, `100.64.0.1` is not ICMP reachable. Or you can use IPv6 gateway address in `STARLINK_DEFAULT_GW`. You can find out the IPv6 gateway address by running `mtr`/`traceroute`, and it is usually the second hop if the dish is not in bypass mode.
+
+**Optional environment variables**
+
+| Environment variables   	| Default value      	| Note                                                                                                                                     	|
+|-------------------------	|--------------------	|------------------------------------------------------------------------------------------------------------------------------------------	|
+| STARLINK_DEFAULT_GW     	| 100.64.0.1         	| Starlink gateway IP. Support both IPv4 or IPv6. Need to be changed when the dish is in bypass mode or has public IPv4 address.           	|
+| STARLINK_GRPC_ADDR_PORT 	| 192.168.100.1:9200 	| Starlink gRPC interface IP address. Most of the time no need to change this.                                                             	|
+| IFCE                    	|                    	| The name of the network interface that is connected to Starlink. If specified, `-I` option with the specified value is passed to `ping`. 	|
+| DURATION                	| 2m                 	| Measurement duration.                                                                                                                    	|
+| INTERVAL                	| 10ms               	| ICMP ping packet interval.                                                                                                               	|
+
+Optional environment variables can be passed to the container using either the `-e` or `--env-file` option. E.g.,
+
+```bash
+docker run -it --rm \
+  -e STARLINK_DEFAULT_GW=100.64.0.1 \
+  -e STARLINK_GRPC_ADDR_PORT=192.168.100.1:9200 \
+  -e IFCE=eth0 \
+  -e DURATION=5m \
+  -e INTERVAL=100ms \
+  -v ./data:/app/starlink/data \
+  --network host \
+  clarkzjw/leoviz:starlink \
+  poetry run python3 main.py --run-once --lat LAT --lon LON --alt ALT
+```
 
 You will see the following message on the terminal:
 
