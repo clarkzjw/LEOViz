@@ -2,6 +2,7 @@
 import os
 import argparse
 import subprocess
+from copy import deepcopy
 from pathlib import Path
 from datetime import datetime
 from multiprocessing import Pool
@@ -71,7 +72,14 @@ def get_starlink_generation_by_norad_id(norad_id):
         return "Unknown"
 
 
-def plot_once(row, df_obstruction_map, df_rtt, df_sinr, all_satellites):
+def plot_once(
+    row,
+    df_obstruction_map,
+    df_cumulative_obstruction_map,
+    df_rtt,
+    df_sinr,
+    all_satellites,
+):
     timestamp_str = row["Timestamp"]
     connected_sat_name = row["Connected_Satellite"]
     plot_current = pd.to_datetime(timestamp_str, format="%Y-%m-%d %H:%M:%S%z")
@@ -88,10 +96,10 @@ def plot_once(row, df_obstruction_map, df_rtt, df_sinr, all_satellites):
     fig = plt.figure(figsize=(20, 10))
     gs0 = gridspec.GridSpec(1, 2, figure=fig, width_ratios=[5, 5])
 
-    gs00 = gs0[0].subgridspec(4, 1)
+    gs00 = gs0[0].subgridspec(4, 2)
     axSat = fig.add_subplot(gs00[:3, :], projection=projStereographic)
-    # axObstructionMapCumulative = fig.add_subplot(gs00[3, 0])
-    axObstructionMapInstantaneous = fig.add_subplot(gs00[3, :])
+    axObstructionMapInstantaneous = fig.add_subplot(gs00[3, 0])
+    axObstructionMapCumulative = fig.add_subplot(gs00[3, 1])
 
     frame_type_int = df_obstruction_map["frame_type"].iloc[0]
     if frame_type_int == 0:
@@ -109,7 +117,18 @@ def plot_once(row, df_obstruction_map, df_rtt, df_sinr, all_satellites):
         cmap="gray",
     )
     axObstructionMapInstantaneous.set_title(
-        f"Instantaneous gRPC obstruction map in current timeslot, frame type: {FRAME_TYPE}"
+        f"Instantaneous satellite trajectory from gRPC"
+    )
+
+    cumulativeObstructionMap = get_obstruction_map_by_timestamp(
+        df_cumulative_obstruction_map, timestamp_str
+    )
+    axObstructionMapCumulative.imshow(
+        cumulativeObstructionMap,
+        cmap="gray",
+    )
+    axObstructionMapCumulative.set_title(
+        f"Cumulative obstruction map, frame type: {FRAME_TYPE}"
     )
 
     axSat.set_extent(
@@ -313,6 +332,23 @@ def plot_once(row, df_obstruction_map, df_rtt, df_sinr, all_satellites):
     print(f"Saved figure for {timestamp_str}")
 
 
+def cumulative_obstruction_map(df_obstruction_map: pd.DataFrame):
+    df_cumulative = df_obstruction_map.copy()
+
+    if len(df_obstruction_map) > 0:
+        current_cumulative = deepcopy(df_obstruction_map.iloc[0]["obstruction_map"])
+        df_cumulative.at[0, "obstruction_map"] = current_cumulative
+
+        for index in range(1, len(df_obstruction_map)):
+            current_cumulative = (
+                current_cumulative.astype(bool)
+                | df_obstruction_map.iloc[index]["obstruction_map"].astype(bool)
+            ).astype(int)
+            df_cumulative.at[index, "obstruction_map"] = deepcopy(current_cumulative)
+
+    return df_cumulative
+
+
 def plot():
     global projStereographic
     global centralLat
@@ -345,6 +381,7 @@ def plot():
         df_obstruction_map["timestamp"] = pd.to_datetime(
             df_obstruction_map["timestamp"], unit="s", utc=True
         )
+        df_cumulative_obstruction_map = cumulative_obstruction_map(df_obstruction_map)
 
     CPU_COUNT = os.cpu_count() - 1 if os.cpu_count() > 1 else 1
     print(f"Process count: {CPU_COUNT}")
@@ -356,7 +393,14 @@ def plot():
             # plot_once(row, df_obstruction_map, df_rtt, df_sinr, all_satellites)
             result = pool.apply_async(
                 plot_once,
-                args=(row, df_obstruction_map, df_rtt, df_sinr, all_satellites),
+                args=(
+                    row,
+                    df_obstruction_map,
+                    df_cumulative_obstruction_map,
+                    df_rtt,
+                    df_sinr,
+                    all_satellites,
+                ),
             )
             results.append(result)
 
