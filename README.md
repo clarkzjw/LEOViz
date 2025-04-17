@@ -74,7 +74,7 @@ Note that if you have Tailscale installed on the same device that you are going 
 |-------------------------	|--------------------	|------------------------------------------------------------------------------------------------------------------------------------------	|
 | STARLINK_DEFAULT_GW     	| 100.64.0.1         	| Starlink gateway IP. Support both IPv4 or IPv6. Need to be changed when the dish is in bypass mode or has public IPv4 address.           	|
 | STARLINK_GRPC_ADDR_PORT 	| 192.168.100.1:9200 	| Starlink gRPC interface IP address. Most of the time no need to change this.                                                             	|
-| IFCE                    	|                    	| The name of the network interface that is connected to Starlink. If specified, `-I` option with the specified value is passed to `ping`. 	|
+| IFCE                    	| <Empty\>            	| The name of the network interface that is connected to Starlink. If specified, `-I` option with the specified value is passed to `ping`. 	|
 | DURATION                	| 2m                 	| Measurement duration.                                                                                                                    	|
 | INTERVAL                	| 10ms               	| ICMP ping packet interval.                                                                                                               	|
 

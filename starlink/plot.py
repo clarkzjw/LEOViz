@@ -20,10 +20,11 @@ from skyfield.api import load
 cartopy.config["data_dir"] = os.getenv("CARTOPY_DIR", cartopy.config.get("data_dir"))
 
 from util import load_ping, load_tle_from_file, load_connected_satellites
-from pop import get_pop_data
+from pop import get_pop_data, get_home_pop
 from pprint import pprint
 
 POP_DATA = None
+HOME_POP = None
 
 centralLat = None
 centralLon = None
@@ -166,7 +167,7 @@ def plot_once(
             POP_DATA["lats"],
             transform=projPlateCarree,
             color="purple",
-            label="POP",
+            label="POP (Red = Home POP)",
             s=60,
             marker="x",
         )
@@ -174,13 +175,20 @@ def plot_once(
         for lon, lat, name in zip(
             POP_DATA["lons"], POP_DATA["lats"], POP_DATA["names"]
         ):
+            if name == "sttlwax9":
+                continue
+            color = "green"
+
+            if name == HOME_POP:
+                color = "red"
+
             axSat.text(
                 lon,
                 lat,
                 name,
                 transform=projPlateCarree,
                 fontsize=10,
-                color="red",
+                color=color,
                 wrap=True,
                 clip_on=True,
             )
@@ -354,6 +362,7 @@ def plot():
     global centralLat
     global centralLon
     global POP_DATA
+    global HOME_POP
 
     for file in [
         OBSTRUCTION_MAP_DATA,
@@ -382,6 +391,8 @@ def plot():
             df_obstruction_map["timestamp"], unit="s", utc=True
         )
         df_cumulative_obstruction_map = cumulative_obstruction_map(df_obstruction_map)
+
+    HOME_POP = get_home_pop()
 
     CPU_COUNT = os.cpu_count() - 1 if os.cpu_count() > 1 else 1
     print(f"Process count: {CPU_COUNT}")
