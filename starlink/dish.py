@@ -118,13 +118,13 @@ def get_sinr():
                             popPingLatencyMs,
                             dlThroughputBps,
                             upThroughputBps,
-                            alignment["tiltAngleDeg"],
-                            alignment["boresightAzimuthDeg"],
-                            alignment["boresightElevationDeg"],
-                            alignment["attitudeEstimationState"],
-                            alignment["attitudeUncertaintyDeg"],
-                            alignment["desiredBoresightAzimuthDeg"],
-                            alignment["desiredBoresightElevationDeg"],
+                            alignment.get("tiltAngleDeg", 0),
+                            alignment.get("boresightAzimuthDeg", 0),
+                            alignment.get("boresightElevationDeg", 0),
+                            alignment.get("attitudeEstimationState", ""),
+                            alignment.get("attitudeUncertaintyDeg", 0),
+                            alignment.get("desiredBoresightAzimuthDeg", 0),
+                            alignment.get("desiredBoresightElevationDeg", 0),
                         ]
                     )
                     outfile.flush()
