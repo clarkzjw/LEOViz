@@ -13,15 +13,15 @@ import config
 
 from satellites import convert_observed, process_intervals
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from config import DATA_DIR, STARLINK_GRPC_ADDR_PORT, DURATION_SECONDS, TLE_DATA_DIR
 from util import date_time_string, ensure_data_directory
-from obstruction import process_obstruction_maps, create_obstruction_map_video
+from obstruction import create_obstruction_map_video, process_obstruction_timeslot
 
 import numpy as np
 import pandas as pd
-from skyfield.api import load, wgs84, utc
+from skyfield.api import load
 
 logger = logging.getLogger(__name__)
 
@@ -135,13 +135,33 @@ def get_sinr():
     logger.info("save sinr measurement to {}".format(FILENAME))
 
 
-def wait_until_target_time():
-    target_seconds = {12, 27, 42, 57}
+def wait_until_target_time(last_timeslot_second):
     while True:
         current_second = datetime.now(timezone.utc).second
-        if current_second in target_seconds:
+        if current_second >= 12 and current_second < 27 and last_timeslot_second != 12:
+            last_timeslot_second = 12
             break
-        time.sleep(0.5)
+        elif (
+            current_second >= 27 and current_second < 42 and last_timeslot_second != 27
+        ):
+            last_timeslot_second = 27
+            break
+        elif (
+            current_second >= 42 and current_second < 57 and last_timeslot_second != 42
+        ):
+            last_timeslot_second = 42
+            break
+        elif (
+            current_second >= 57 and current_second < 60 and last_timeslot_second != 57
+        ):
+            last_timeslot_second = 57
+            break
+        elif current_second >= 0 and current_second < 12 and last_timeslot_second != 57:
+            last_timeslot_second = 57
+            break
+        time.sleep(0.1)
+    logger.info("current timeslot second: {}".format(last_timeslot_second))
+    return last_timeslot_second
 
 
 def get_obstruction_map_frame_type():
@@ -156,76 +176,142 @@ def get_obstruction_map_frame_type():
     return map.map_reference_frame, frame_type
 
 
+def process_obstruction_estimate_satellites_per_timeslot(
+    timeslot_df, writer, csvfile, filename, dt_string, date, frame_type_int
+):
+    try:
+        process_obstruction_timeslot(timeslot_df, writer)
+        csvfile.flush()
+        write_obstruction_map_parquet(filename, timeslot_df)
+
+        if config.LATITUDE and config.LONGITUDE and config.ALTITUDE:
+            SINR_FILENAME = "{}/{}/GRPC_STATUS-{}.csv".format(
+                GRPC_DATA_DIR, date, dt_string
+            )
+            df_sinr = pd.read_csv(SINR_FILENAME)
+            estimate_connected_satellites(
+                dt_string,
+                date,
+                frame_type_int,
+                df_sinr,
+                timeslot_df.iloc[0]["timestamp"],
+                timeslot_df.iloc[-1]["timestamp"],
+            )
+    except Exception as e:
+        logger.error(f"Error in processing thread: {str(e)}")
+
+
 def get_obstruction_map():
     name = "GRPC_GetObstructionMap"
     logger.info("{}, {}".format(name, threading.current_thread()))
 
     dt_string = date_time_string()
     date = ensure_data_directory(GRPC_DATA_DIR)
-    FILENAME = "{}/{}/obstruction_map-{}.parquet".format(GRPC_DATA_DIR, date, dt_string)
+    FILENAME = f"{GRPC_DATA_DIR}/{date}/obstruction_map-{dt_string}.parquet"
+    OBSTRUCTION_DATA_FILENAME = f"{DATA_DIR}/obstruction-data-{dt_string}.csv"
     TIMESLOT_DURATION = 14
 
     frame_type_int, frame_type_str = get_obstruction_map_frame_type()
 
     start = time.time()
-    obstruction_data_array = []
-    timestamp_array = []
-    while time.time() < start + DURATION_SECONDS:
-        try:
-            context = starlink_grpc.ChannelContext(target=STARLINK_GRPC_ADDR_PORT)
-            wait_until_target_time()
 
-            starlink_grpc.reset_obstruction_map(context)
-            logger.info("clearing obstruction map data")
-            timeslot_start = time.time()
+    with open(OBSTRUCTION_DATA_FILENAME, "w", newline="") as csvfile:
+        writer = csv.writer(csvfile)
+        context = starlink_grpc.ChannelContext(target=STARLINK_GRPC_ADDR_PORT)
+        last_timeslot_second = None
 
-            while time.time() < timeslot_start + TIMESLOT_DURATION:
-                obstruction_data = np.array(
-                    starlink_grpc.obstruction_map(context), dtype=int
+        while time.time() < start + DURATION_SECONDS:
+            try:
+                if last_timeslot_second is None:
+                    now = datetime.now(timezone.utc)
+                    if now.second >= 12 and now.second < 27:
+                        start_time = now.replace(microsecond=0).replace(second=27)
+                        last_timeslot_second = 27
+                    elif now.second >= 27 and now.second < 42:
+                        start_time = now.replace(microsecond=0).replace(second=42)
+                        last_timeslot_second = 42
+                    elif now.second >= 42 and now.second < 57:
+                        start_time = now.replace(microsecond=0).replace(second=57)
+                        last_timeslot_second = 57
+                    elif now.second >= 57 and now.second < 60:
+                        start_time = now.replace(microsecond=0).replace(
+                            second=12
+                        ) + timedelta(minutes=1)
+                        last_timeslot_second = 12
+                    elif now.second >= 0 and now.second < 12:
+                        start_time = now.replace(microsecond=0).replace(second=12)
+                        last_timeslot_second = 12
+
+                    while datetime.now(timezone.utc) < start_time:
+                        time.sleep(0.1)
+                else:
+                    last_timeslot_second = wait_until_target_time(last_timeslot_second)
+
+                starlink_grpc.reset_obstruction_map(context)
+                logger.info("clearing obstruction map data")
+                timeslot_start = time.time()
+
+                obstruction_data_array = []
+                timestamp_array = []
+
+                while time.time() < timeslot_start + TIMESLOT_DURATION:
+                    obstruction_data = np.array(
+                        starlink_grpc.obstruction_map(context), dtype=int
+                    )
+                    obstruction_data[obstruction_data == -1] = 0
+                    obstruction_data = obstruction_data.flatten()
+
+                    timestamp_array.append(time.time())
+                    obstruction_data_array.append(obstruction_data)
+                    time.sleep(0.5)
+
+                # obstruction data for the current 15-second timeslot
+                timeslot_df = pd.DataFrame(
+                    {
+                        "timestamp": timestamp_array,
+                        "frame_type": frame_type_int,
+                        "obstruction_map": obstruction_data_array,
+                    }
                 )
-                obstruction_data[obstruction_data == -1] = 0
-                obstruction_data = obstruction_data.flatten()
 
-                timestamp_array.append(time.time())
-                obstruction_data_array.append(obstruction_data)
-                time.sleep(1)
+                processing_thread = threading.Thread(
+                    target=process_obstruction_estimate_satellites_per_timeslot,
+                    args=(
+                        timeslot_df,
+                        writer,
+                        csvfile,
+                        FILENAME,
+                        dt_string,
+                        date,
+                        frame_type_int,
+                    ),
+                )
+                # processing_thread.daemon = True
+                processing_thread.start()
 
-        except starlink_grpc.GrpcError as e:
-            logger.error("Failed getting obstruction map data:", str(e))
+            except starlink_grpc.GrpcError as e:
+                logger.error("Failed getting obstruction map data:", str(e))
 
-    df = pd.DataFrame(
-        {
-            "timestamp": timestamp_array,
-            "frame_type": frame_type_int,
-            "obstruction_map": obstruction_data_array,
-        }
-    )
-    pd.DataFrame(df).to_parquet(
-        FILENAME,
-        engine="pyarrow",
-        compression="zstd",
-    )
-    logger.info("saved obstruction map data to {}".format(FILENAME))
+    create_obstruction_map_video(FILENAME, dt_string, 5)
 
-    process_obstruction_maps(df, dt_string)
-    create_obstruction_map_video(df, dt_string, 5)
 
-    print("start: ", df.iloc[0]["timestamp"])
-    print("end: ", df.iloc[-1]["timestamp"])
-
-    if config.LATITUDE and config.LONGITUDE and config.ALTITUDE:
-        SINR_FILENAME = "{}/{}/GRPC_STATUS-{}.csv".format(
-            GRPC_DATA_DIR, date, dt_string
+def write_obstruction_map_parquet(FILENAME, timeslot_df):
+    if os.path.exists(FILENAME):
+        existing_df = pd.read_parquet(FILENAME)
+        combined_df = pd.concat([existing_df, timeslot_df], ignore_index=True)
+        combined_df.to_parquet(
+            FILENAME,
+            engine="pyarrow",
+            compression="zstd",
         )
-        df_sinr = pd.read_csv(SINR_FILENAME)
-        estimate_connected_satellites(
-            dt_string,
-            date,
-            frame_type_int,
-            df_sinr,
-            df.iloc[0]["timestamp"],
-            df.iloc[-1]["timestamp"],
+        logger.info("appended obstruction map data to {}".format(FILENAME))
+    else:
+        timeslot_df.to_parquet(
+            FILENAME,
+            engine="pyarrow",
+            compression="zstd",
         )
+        logger.info("saved obstruction map data to {}".format(FILENAME))
 
 
 def estimate_connected_satellites(uuid, date, frame_type, df_sinr, start, end):
@@ -277,4 +363,4 @@ def estimate_connected_satellites(uuid, date, frame_type, df_sinr, start, end):
 
     updated_df.to_csv(f"{DATA_DIR}/serving_satellite_data-{uuid}.csv", index=False)
 
-    print(f"Updated data saved to '{DATA_DIR}/serving_satellite_data-{uuid}.csv'")
+    logger.info(f"Updated data saved to '{DATA_DIR}/serving_satellite_data-{uuid}.csv'")

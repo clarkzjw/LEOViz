@@ -1,6 +1,7 @@
 # flake8: noqa:E501
 
 import math
+import logging
 import config
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -8,6 +9,8 @@ from pathlib import Path
 import pandas as pd
 import numpy as np
 from skyfield.api import load, wgs84, utc
+
+logger = logging.getLogger(__name__)
 
 
 def pre_process_observed_data(filename, frame_type, df_sinr):
