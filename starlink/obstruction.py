@@ -1,6 +1,5 @@
-# flake8: noqa: E501
 import csv
-
+import logging
 from datetime import datetime, timezone
 
 from config import DATA_DIR
@@ -8,6 +7,42 @@ from config import DATA_DIR
 import cv2
 import pandas as pd
 import numpy as np
+
+logger = logging.getLogger(__name__)
+
+
+def process_obstruction_timeslot(timeslot_df, writer):
+    logger.info("process_obstruction_timeslot")
+    previous_obstruction_map = timeslot_df.iloc[0]["obstruction_map"]
+    previous_obstruction_map = previous_obstruction_map.reshape(123, 123)
+
+    hold_coord = None
+    white_pixel_coords = []
+    for index, row in timeslot_df.iterrows():
+        timestamp_dt = datetime.fromtimestamp(row["timestamp"], tz=timezone.utc)
+        obstruction_map = row["obstruction_map"].reshape(123, 123)
+        xor_map = np.bitwise_xor(previous_obstruction_map, obstruction_map)
+        coords = np.argwhere(xor_map == 1)
+
+        if coords.size > 0:
+            coord = coords[-1]  # Get the last occurrence
+            hold_coord = coord  # Update hold_coord
+        elif hold_coord is not None:
+            coord = hold_coord  # Use the previous hold_coord if coords is empty
+        else:
+            continue  # If both coords is empty and hold_coord is None, skip this iteration
+
+        white_pixel_coords.append((timestamp_dt, tuple(coord)))
+        previous_obstruction_map = obstruction_map
+
+    for coord in white_pixel_coords:
+        writer.writerow(
+            [
+                coord[0].strftime("%Y-%m-%d %H:%M:%S"),
+                coord[1][0],
+                coord[1][1],
+            ]
+        )
 
 
 def process_obstruction_maps(df_obstruction_map, uuid):
@@ -94,7 +129,8 @@ def process_obstruction_maps(df_obstruction_map, uuid):
             start_time_dt += pd.Timedelta(seconds=15)
 
 
-def create_obstruction_map_video(df_obstruction_map, uuid, fps):
+def create_obstruction_map_video(FILENAME, uuid, fps):
+    df = pd.read_parquet(FILENAME)
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")
     out = cv2.VideoWriter(
         f"{DATA_DIR}/obstruction_map-{uuid}.mp4",
@@ -102,7 +138,7 @@ def create_obstruction_map_video(df_obstruction_map, uuid, fps):
         fps,
         (123, 123),
     )
-    for index, row in df_obstruction_map.iterrows():
+    for index, row in df.iterrows():
         obstruction_map = row["obstruction_map"].reshape(123, 123)
         image_data = (obstruction_map * 255).astype(np.uint8)
         image_data_bgr = cv2.cvtColor(image_data, cv2.COLOR_GRAY2BGR)
