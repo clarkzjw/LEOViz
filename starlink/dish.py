@@ -74,27 +74,27 @@ def get_sinr():
         STARLINK_GRPC_ADDR_PORT,
         "SpaceX.API.Device.Device/Handle",
     ]
-    try:
-        with open(FILENAME, "w") as outfile:
-            start = time.time()
-            csv_writer = csv.writer(outfile)
-            csv_writer.writerow(
-                [
-                    "timestamp",
-                    "sinr",
-                    "popPingLatencyMs",
-                    "downlinkThroughputBps",
-                    "uplinkThroughputBps",
-                    "tiltAngleDeg",
-                    "boresightAzimuthDeg",
-                    "boresightElevationDeg",
-                    "attitudeEstimationState",
-                    "attitudeUncertaintyDeg",
-                    "desiredBoresightAzimuthDeg",
-                    "desiredBoresightElevationDeg",
-                ]
-            )
-            while time.time() < start + DURATION_SECONDS:
+    with open(FILENAME, "w") as outfile:
+        start = time.time()
+        csv_writer = csv.writer(outfile)
+        csv_writer.writerow(
+            [
+                "timestamp",
+                "sinr",
+                "popPingLatencyMs",
+                "downlinkThroughputBps",
+                "uplinkThroughputBps",
+                "tiltAngleDeg",
+                "boresightAzimuthDeg",
+                "boresightElevationDeg",
+                "attitudeEstimationState",
+                "attitudeUncertaintyDeg",
+                "desiredBoresightAzimuthDeg",
+                "desiredBoresightElevationDeg",
+            ]
+        )
+        while time.time() < start + DURATION_SECONDS:
+            try:
                 output = subprocess.check_output(cmd, timeout=GRPC_TIMEOUT)
                 data = json.loads(output.decode("utf-8"))
                 if (
@@ -129,8 +129,8 @@ def get_sinr():
                     )
                     outfile.flush()
                     time.sleep(0.5)
-    except subprocess.TimeoutExpired:
-        pass
+            except Exception:
+                pass
 
     logger.info("save sinr measurement to {}".format(FILENAME))
 
