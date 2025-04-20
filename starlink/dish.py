@@ -214,6 +214,7 @@ def get_obstruction_map():
     frame_type_int, frame_type_str = get_obstruction_map_frame_type()
 
     start = time.time()
+    thread_pool = []
 
     with open(OBSTRUCTION_DATA_FILENAME, "w", newline="") as csvfile:
         writer = csv.writer(csvfile)
@@ -288,9 +289,13 @@ def get_obstruction_map():
                 )
                 # processing_thread.daemon = True
                 processing_thread.start()
+                thread_pool.append(processing_thread)
 
             except starlink_grpc.GrpcError as e:
                 logger.error("Failed getting obstruction map data:", str(e))
+
+        for thread in thread_pool:
+            thread.join()
 
     create_obstruction_map_video(FILENAME, dt_string, 5)
 
