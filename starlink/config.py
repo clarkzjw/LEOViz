@@ -50,6 +50,6 @@ INTERVAL_SEC = str(float(INTERVAL_MS[:-2]) / 1000.0)
 
 def print_config():
     print("Starlink gRPC address: {}".format(STARLINK_GRPC_ADDR_PORT))
-    print("Starlink default gateway: {}".format(STARLINK_DEFAULT_GW))
+    print("Starlink gateway: {}".format(STARLINK_DEFAULT_GW))
     print("Measurement interval: {}".format(INTERVAL_MS))
     print("Measurement duration: {}".format(DURATION))

@@ -55,7 +55,7 @@ def grpc_get_status() -> None:
     except subprocess.TimeoutExpired:
         pass
 
-    logger.info("save grpc status to {}".format(FILENAME))
+    logger.info("Saved gRPC dish status to {}".format(FILENAME))
 
 
 def get_sinr():
@@ -132,7 +132,7 @@ def get_sinr():
             except Exception:
                 pass
 
-    logger.info("save sinr measurement to {}".format(FILENAME))
+    logger.info("SNR measurement saved to {}".format(FILENAME))
 
 
 def wait_until_target_time(last_timeslot_second):
@@ -160,7 +160,7 @@ def wait_until_target_time(last_timeslot_second):
             last_timeslot_second = 57
             break
         time.sleep(0.1)
-    logger.info("current timeslot second: {}".format(last_timeslot_second))
+    logger.info("Current timeslot starts at second: {}".format(last_timeslot_second))
     return last_timeslot_second
 
 
@@ -179,6 +179,7 @@ def get_obstruction_map_frame_type():
 def process_obstruction_estimate_satellites_per_timeslot(
     timeslot_df, writer, csvfile, filename, dt_string, date, frame_type_int
 ):
+    logger.info("Processing obstruction map for the past timeslot")
     try:
         process_obstruction_timeslot(timeslot_df, writer)
         csvfile.flush()
@@ -249,7 +250,7 @@ def get_obstruction_map():
                     last_timeslot_second = wait_until_target_time(last_timeslot_second)
 
                 starlink_grpc.reset_obstruction_map(context)
-                logger.info("clearing obstruction map data")
+                logger.info("Resetting dish obstruction map")
                 timeslot_start = time.time()
 
                 obstruction_data_array = []
@@ -309,14 +310,13 @@ def write_obstruction_map_parquet(FILENAME, timeslot_df):
             engine="pyarrow",
             compression="zstd",
         )
-        logger.info("appended obstruction map data to {}".format(FILENAME))
     else:
         timeslot_df.to_parquet(
             FILENAME,
             engine="pyarrow",
             compression="zstd",
         )
-        logger.info("saved obstruction map data to {}".format(FILENAME))
+    logger.info("Saved dish obstruction map to {}".format(FILENAME))
 
 
 def estimate_connected_satellites(uuid, date, frame_type, df_sinr, start, end):
@@ -368,4 +368,6 @@ def estimate_connected_satellites(uuid, date, frame_type, df_sinr, start, end):
 
     updated_df.to_csv(f"{DATA_DIR}/serving_satellite_data-{uuid}.csv", index=False)
 
-    logger.info(f"Updated data saved to '{DATA_DIR}/serving_satellite_data-{uuid}.csv'")
+    logger.info(
+        f"Connected satellites estimation for timeslot {start_ts} saved to '{DATA_DIR}/serving_satellite_data-{uuid}.csv'"
+    )
