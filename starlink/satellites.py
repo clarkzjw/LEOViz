@@ -302,7 +302,6 @@ def find_matching_satellites(
 def calculate_distance_for_best_match(
     satellite, observer_location, start_time, interval_seconds
 ):
-    ts = load.timescale()
     distances = []
     for second in range(0, interval_seconds + 1):
         current_time = start_time + timedelta(seconds=second)
@@ -331,7 +330,6 @@ def process(
         longitude_degrees=config.LONGITUDE,
         elevation_m=config.ALTITUDE,
     )
-    interval_seconds = 15
     observed_positions_with_timestamps = process_observed_data(
         filename, initial_time.utc_strftime("%Y-%m-%dT%H:%M:%SZ"), merged_data_file
     )
@@ -389,7 +387,7 @@ def process_intervals(
     current_time = start_time
 
     while current_time <= end_time:
-        print(f"Processing data for {current_time}")
+        logger.info(f"Estimating connected satellites for timeslot {current_time}")
         observed_positions_with_timestamps, matching_satellites, distances = process(
             filename,
             current_time.year,

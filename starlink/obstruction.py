@@ -12,7 +12,6 @@ logger = logging.getLogger(__name__)
 
 
 def process_obstruction_timeslot(timeslot_df, writer):
-    logger.info("process_obstruction_timeslot")
     previous_obstruction_map = timeslot_df.iloc[0]["obstruction_map"]
     previous_obstruction_map = previous_obstruction_map.reshape(123, 123)
 

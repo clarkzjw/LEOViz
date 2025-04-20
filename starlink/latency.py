@@ -47,4 +47,4 @@ def icmp_ping() -> None:
     except subprocess.TimeoutExpired:
         pass
 
-    logger.info("save rtt measurement to {}".format(FILENAME))
+    logger.info("Latency measurement saved to {}".format(FILENAME))
