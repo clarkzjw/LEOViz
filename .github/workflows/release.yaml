@@ -5,6 +5,9 @@ on:
     tags:
       - v*
 
+permissions:
+  contents: write
+
 jobs:
   tests:
     runs-on: ubuntu-latest
@@ -66,3 +69,12 @@ jobs:
           file: Dockerfile-starlink
           push: true
           tags: ${{ secrets.DOCKER_USERNAME }}/leoviz:starlink
+
+      - name: Create GitHub release
+        uses: goreleaser/goreleaser-action@v6
+        if: success() && startsWith(github.ref, 'refs/tags/')
+        with:
+          version: latest
+          args: release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

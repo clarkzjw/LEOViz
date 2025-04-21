@@ -1,0 +1,15 @@
+builds:
+  - skip: true
+
+changelog:
+  sort: asc
+  use: github-native
+  filters:
+    exclude:
+      - Merge pull request
+      - Merge remote-tracking branch
+      - Merge branch
+
+release:
+  mode: append
+  skip_upload: true
