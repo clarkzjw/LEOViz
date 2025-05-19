@@ -31,7 +31,31 @@ import starlink_grpc
 GRPC_DATA_DIR = "{}/grpc".format(DATA_DIR)
 GRPC_TIMEOUT = 10
 
+def grpc_get_location() -> None:
+    name = "GRPC_GetLocation"
+    logger.info("{}, {}".format(name, threading.current_thread()))
 
+    FILENAME = "{}/{}/GetLocation-{}.txt".format(
+        GRPC_DATA_DIR, ensure_data_directory(GRPC_DATA_DIR), date_time_string()
+    )
+
+    # grpcurl -plaintext -d {\"get_location\":{}} 192.168.100.1:9200 SpaceX.API.Device.Device/Handle
+    cmd = [
+        "grpcurl",
+        "-plaintext",
+        "-d",
+        '{"get_location":{}}',
+        STARLINK_GRPC_ADDR_PORT,
+        "SpaceX.API.Device.Device/Handle",
+    ]
+    try:
+        with open(FILENAME, "w") as outfile:
+            subprocess.run(cmd, stdout=outfile, timeout=GRPC_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        pass
+
+    logger.info("Saved gRPC dish location to {}".format(FILENAME))
+    
 def grpc_get_status() -> None:
     name = "GRPC_GetStatus"
     logger.info("{}, {}".format(name, threading.current_thread()))
@@ -57,16 +81,75 @@ def grpc_get_status() -> None:
 
     logger.info("Saved gRPC dish status to {}".format(FILENAME))
 
+def write_csv_header(csv_writer, mobile: bool) -> None:
+    base_columns = [
+        "timestamp",
+        "sinr",
+        "popPingLatencyMs",
+        "downlinkThroughputBps",
+        "uplinkThroughputBps",
+        "tiltAngleDeg",
+        "boresightAzimuthDeg",
+        "boresightElevationDeg",
+        "attitudeEstimationState",
+        "attitudeUncertaintyDeg",
+        "desiredBoresightAzimuthDeg",
+        "desiredBoresightElevationDeg",
+    ]
+    mobile_columns = [
+        "latitude",
+        "longitude",
+        "altitude",
+        "qScalar",
+        "qX",
+        "qY",
+        "qZ",
+    ]
+    header = base_columns + (mobile_columns if mobile else [])
+    csv_writer.writerow(header)
 
-def get_sinr():
+
+def extract_status_fields(status: dict) -> list:
+    alignment = status.get("alignmentStats", {})
+    return [
+        time.time(),
+        status.get("phyRxBeamSnrAvg", 0),
+        status.get("popPingLatencyMs", 0),
+        status.get("downlinkThroughputBps", 0),
+        status.get("uplinkThroughputBps", 0),
+        alignment.get("tiltAngleDeg", 0),
+        alignment.get("boresightAzimuthDeg", 0),
+        alignment.get("boresightElevationDeg", 0),
+        alignment.get("attitudeEstimationState", ""),
+        alignment.get("attitudeUncertaintyDeg", 0),
+        alignment.get("desiredBoresightAzimuthDeg", 0),
+        alignment.get("desiredBoresightElevationDeg", 0),
+    ]
+
+
+def extract_location_fields(location_data: dict, status: dict) -> list:
+    lla = location_data.get("getLocation", {}).get("lla", {})
+    quaternion = status.get("ned2dishQuaternion", {})
+    return [
+        lla.get("lat", 0),
+        lla.get("lon", 0),
+        lla.get("alt", 0),
+        quaternion.get("qScalar", 0),
+        quaternion.get("qX", 0),
+        quaternion.get("qY", 0),
+        quaternion.get("qZ", 0),
+    ]
+
+
+def get_sinr() -> None:
     name = "GRPC_phyRxBeamSnrAvg"
-    logger.info("{}, {}".format(name, threading.current_thread()))
+    logger.info(f"{name}, {threading.current_thread()}")
 
     FILENAME = "{}/{}/GRPC_STATUS-{}.csv".format(
         GRPC_DATA_DIR, ensure_data_directory(GRPC_DATA_DIR), date_time_string()
     )
 
-    cmd = [
+    status_cmd = [
         "grpcurl",
         "-plaintext",
         "-d",
@@ -74,66 +157,47 @@ def get_sinr():
         STARLINK_GRPC_ADDR_PORT,
         "SpaceX.API.Device.Device/Handle",
     ]
-    with open(FILENAME, "w") as outfile:
-        start = time.time()
+    location_cmd = [
+        "grpcurl",
+        "-plaintext",
+        "-d",
+        '{"get_location":{}}',
+        STARLINK_GRPC_ADDR_PORT,
+        "SpaceX.API.Device.Device/Handle",
+    ]
+
+    with open(FILENAME, "w", newline="") as outfile:
         csv_writer = csv.writer(outfile)
-        csv_writer.writerow(
-            [
-                "timestamp",
-                "sinr",
-                "popPingLatencyMs",
-                "downlinkThroughputBps",
-                "uplinkThroughputBps",
-                "tiltAngleDeg",
-                "boresightAzimuthDeg",
-                "boresightElevationDeg",
-                "attitudeEstimationState",
-                "attitudeUncertaintyDeg",
-                "desiredBoresightAzimuthDeg",
-                "desiredBoresightElevationDeg",
-            ]
-        )
-        while time.time() < start + DURATION_SECONDS:
+        write_csv_header(csv_writer, config.MOBILE)
+
+        start_time = time.time()
+        while time.time() < start_time + DURATION_SECONDS:
             try:
-                output = subprocess.check_output(cmd, timeout=GRPC_TIMEOUT)
-                data = json.loads(output.decode("utf-8"))
-                if (
-                    data["dishGetStatus"] is not None
-                    # Starlink may have just rollbacked the firmware
-                    # from 2025.04.08.cr53207 to 2025.03.28.mr52463.2
-                    # thus removing phyRxBeamSnrAvg again
-                    # and "phyRxBeamSnrAvg" in data["dishGetStatus"]
-                    and "alignmentStats" in data["dishGetStatus"]
-                ):
-                    status = data["dishGetStatus"]
-                    sinr = status.get("phyRxBeamSnrAvg", 0)
-                    alignment = status["alignmentStats"]
-                    popPingLatencyMs = status.get("popPingLatencyMs", 0)
-                    dlThroughputBps = status.get("downlinkThroughputBps", 0)
-                    upThroughputBps = status.get("uplinkThroughputBps", 0)
-                    csv_writer.writerow(
-                        [
-                            time.time(),
-                            sinr,
-                            popPingLatencyMs,
-                            dlThroughputBps,
-                            upThroughputBps,
-                            alignment.get("tiltAngleDeg", 0),
-                            alignment.get("boresightAzimuthDeg", 0),
-                            alignment.get("boresightElevationDeg", 0),
-                            alignment.get("attitudeEstimationState", ""),
-                            alignment.get("attitudeUncertaintyDeg", 0),
-                            alignment.get("desiredBoresightAzimuthDeg", 0),
-                            alignment.get("desiredBoresightElevationDeg", 0),
-                        ]
-                    )
-                    outfile.flush()
+                status_output = subprocess.check_output(status_cmd, timeout=GRPC_TIMEOUT)
+                status_data = json.loads(status_output.decode("utf-8"))
+                dish_status = status_data.get("dishGetStatus")
+
+                if not dish_status or "alignmentStats" not in dish_status:
+                    logger.warning("Missing dishGetStatus or alignmentStats in status data")
                     time.sleep(0.5)
-            except Exception:
-                pass
+                    continue
 
-    logger.info("SNR measurement saved to {}".format(FILENAME))
+                row_data = extract_status_fields(dish_status)
 
+                if config.MOBILE:
+                    location_output = subprocess.check_output(location_cmd, timeout=GRPC_TIMEOUT)
+                    location_data = json.loads(location_output.decode("utf-8"))
+                    row_data.extend(extract_location_fields(location_data, dish_status))
+
+                csv_writer.writerow(row_data)
+                outfile.flush()
+                time.sleep(0.5)
+
+            except Exception as e:
+                logger.error(f"Error in get_sinr: {str(e)}")
+                time.sleep(0.5)
+
+    logger.info(f"SNR measurement saved to {FILENAME}")
 
 def wait_until_target_time(last_timeslot_second):
     while True:

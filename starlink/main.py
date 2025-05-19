@@ -10,6 +10,7 @@ from dish import (
     grpc_get_status,
     get_sinr,
     get_obstruction_map,
+    grpc_get_location,
 )
 from util import run, load_tle
 from config import print_config
@@ -20,6 +21,7 @@ logger = logging.getLogger(__name__)
 
 schedule.every(1).hours.at(":00").do(run, icmp_ping).tag("Latency")
 schedule.every(1).hours.at(":00").do(run, grpc_get_status).tag("gRPC")
+# location scheduling moved to main block
 schedule.every(1).hours.at(":00").do(run, get_obstruction_map).tag("gRPC")
 schedule.every(1).hours.at(":00").do(run, get_sinr).tag("gRPC")
 schedule.every(1).hours.at(":00").do(run, load_tle).tag("TLE")
@@ -32,9 +34,16 @@ if __name__ == "__main__":
     parser.add_argument("--lat", type=float, required=False, help="Dish latitude")
     parser.add_argument("--lon", type=float, required=False, help="Dish longitude")
     parser.add_argument("--alt", type=float, required=False, help="Dish altitude")
+    parser.add_argument("--mobile", type=bool, required=False, help="Dish is in mobile mode")
     args = parser.parse_args()
 
     print_config()
+
+    # Set mobile configuration
+    config.MOBILE = bool(args.mobile) if args.mobile is not None else False
+
+    if args.mobile:
+        schedule.every(1).hours.at(":00").do(run, grpc_get_location).tag("gRPC")
 
     if args.lat and args.lon and args.alt:
         config.LATITUDE = args.lat
