@@ -413,6 +413,7 @@ def estimate_connected_satellites(uuid, date, frame_type, df_sinr, start, end):
         merged_data_file,
         satellites,
         frame_type,
+        df_sinr,
     )
 
     merged_data_df = pd.read_csv(merged_data_file, parse_dates=["Timestamp"])

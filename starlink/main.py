@@ -39,20 +39,19 @@ if __name__ == "__main__":
 
     print_config()
 
-    # Set mobile configuration
-    config.MOBILE = bool(args.mobile) if args.mobile is not None else False
+    config.MOBILE = bool(args.mobile)
 
-    if args.mobile:
-        schedule.every(1).hours.at(":00").do(run, grpc_get_location).tag("gRPC")
-
-    if args.lat and args.lon and args.alt:
-        config.LATITUDE = args.lat
-        config.LONGITUDE = args.lon
-        config.ALTITUDE = args.alt
+    if config.MOBILE:
+        # Mobile mode: schedule location updates via gRPC
+        schedule.every().hour.at(":00").do(run, grpc_get_location).tag("gRPC")
     else:
-        logger.warning(
-            "Latitude, Longitude and Altitude not provided. Won't estimate connected satellites."
-        )
+        # Fixed mode: use provided coordinates, if available
+        if all([args.lat, args.lon, args.alt]):
+            config.LATITUDE = args.lat
+            config.LONGITUDE = args.lon
+            config.ALTITUDE = args.alt
+        else:
+            logger.warning("Latitude, Longitude and Altitude not provided. Won't estimate connected satellites.")
 
     if args.run_once:
         schedule.run_all()

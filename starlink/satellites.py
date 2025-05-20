@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 def pre_process_observed_data(filename, frame_type, df_sinr):
     data = pd.read_csv(filename, sep=",", header=None, names=["Timestamp", "Y", "X"])
     data["Timestamp"] = pd.to_datetime(data["Timestamp"], utc=True)
+    df_sinr["timestamp"] = pd.to_datetime(df_sinr["timestamp"], utc=True)
 
     if frame_type == 1:
         frame_type_str = "FRAME_EARTH"
@@ -24,17 +25,20 @@ def pre_process_observed_data(filename, frame_type, df_sinr):
     else:
         frame_type_str = "UNKNOWN"
 
-    _tilt = df_sinr["tiltAngleDeg"].iloc[0]
-    _rotation_az = df_sinr["boresightAzimuthDeg"].iloc[0]
-
-    if frame_type_str == "FRAME_EARTH":
-        observer_x, observer_y = 62, 62  # Assume this is the observer's pixel location
-    elif frame_type_str == "FRAME_UT":
-        observer_x, observer_y = 62, 62 - (_tilt / (80 / 62))
     pixel_to_degrees = 80 / 62  # Conversion factor from pixel to degrees
 
     positions = []
     for index, point in data.iterrows():
+        # Find the closest timestamp in df_sinr
+        closest_idx = (df_sinr["timestamp"] - point["Timestamp"]).abs().idxmin()
+        _tilt = df_sinr["tiltAngleDeg"].iloc[closest_idx]
+        _rotation_az = df_sinr["boresightAzimuthDeg"].iloc[closest_idx]
+
+        if frame_type_str == "FRAME_EARTH":
+            observer_x, observer_y = 62, 62  # Assume this is the observer's pixel location
+        elif frame_type_str == "FRAME_UT":
+            observer_x, observer_y = 62, 62 - (_tilt / (80 / 62))
+
         if frame_type_str == "FRAME_EARTH":
             dx, dy = point["X"] - observer_x, (123 - point["Y"]) - observer_y
         elif frame_type_str == "FRAME_UT":
@@ -323,13 +327,15 @@ def process(
     merged_data_file,
     satellites,
     frame_type,
+    df_sinr=None,
 ):
     initial_time = set_observation_time(year, month, day, hour, minute, second)
-    observer_location = wgs84.latlon(
-        latitude_degrees=config.LATITUDE,
-        longitude_degrees=config.LONGITUDE,
-        elevation_m=config.ALTITUDE,
-    )
+
+    observer_location = get_observer_location(df_sinr)
+
+    print(f"Observer location: {observer_location}")
+    logger.info(f"Observer location: {observer_location}")
+
     observed_positions_with_timestamps = process_observed_data(
         filename, initial_time.utc_strftime("%Y-%m-%dT%H:%M:%SZ"), merged_data_file
     )
@@ -369,6 +375,7 @@ def process_intervals(
     merged_data_file,
     satellites,
     frame_type,
+    df_sinr=None,
 ):
     results = []
 
@@ -399,6 +406,7 @@ def process_intervals(
             merged_data_file,
             satellites,
             frame_type,
+            df_sinr,
         )
         if matching_satellites:
             for second in range(15):
@@ -414,3 +422,27 @@ def process_intervals(
 
     result_df = pd.DataFrame(results)
     return result_df
+
+
+def get_observer_location(df_sinr):
+    """Get observer location from df_sinr if in mobile mode, otherwise use config values."""
+    if config.MOBILE and df_sinr is not None:
+        try:
+            return wgs84.latlon(
+                latitude_degrees=df_sinr['latitude'].iloc[0],
+                longitude_degrees=df_sinr['longitude'].iloc[0],
+                elevation_m=df_sinr['altitude'].iloc[0]
+            )
+        except (KeyError, AttributeError):
+            logger.warning("Location data not found in df_sinr, falling back to config values")
+            return wgs84.latlon(
+                latitude_degrees=config.LATITUDE,
+                longitude_degrees=config.LONGITUDE,
+                elevation_m=config.ALTITUDE
+            )
+    else:
+        return wgs84.latlon(
+            latitude_degrees=config.LATITUDE,
+            longitude_degrees=config.LONGITUDE,
+            elevation_m=config.ALTITUDE
+        )
