@@ -8,6 +8,7 @@ from datetime import timedelta
 LATITUDE = None
 LONGITUDE = None
 ALTITUDE = None
+MOBILE = False
 
 IFCE = os.getenv("IFCE", "")
 
