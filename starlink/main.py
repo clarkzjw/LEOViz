@@ -3,12 +3,13 @@ import time
 import logging
 import argparse
 import schedule
+from typing import Optional, Callable, Any
 
 import config
 from latency import icmp_ping
 from dish import (
     grpc_get_status,
-    get_sinr,
+    monitor_dish_state,
     get_obstruction_map,
     grpc_get_location,
 )
@@ -19,50 +20,123 @@ from config import print_config
 logger = logging.getLogger(__name__)
 
 
-schedule.every(1).hours.at(":00").do(run, icmp_ping).tag("Latency")
-schedule.every(1).hours.at(":00").do(run, grpc_get_status).tag("gRPC")
-# location scheduling moved to main block
-schedule.every(1).hours.at(":00").do(run, get_obstruction_map).tag("gRPC")
-schedule.every(1).hours.at(":00").do(run, get_sinr).tag("gRPC")
-schedule.every(1).hours.at(":00").do(run, load_tle).tag("TLE")
+class Scheduler:
+    """Manages scheduling of various data collection tasks."""
+    
+    @staticmethod
+    def setup_schedules() -> None:
+        """Set up all scheduled tasks."""
+        # Latency measurements
+        schedule.every(1).hours.at(":00").do(run, icmp_ping).tag("Latency")
+        
+        # gRPC data collection
+        schedule.every(1).hours.at(":00").do(run, grpc_get_status).tag("gRPC")
+        schedule.every(1).hours.at(":00").do(run, get_obstruction_map).tag("gRPC")
+        schedule.every(1).hours.at(":00").do(run, monitor_dish_state).tag("gRPC")
+        
+        # TLE data updates
+        schedule.every(1).hours.at(":00").do(run, load_tle).tag("TLE")
 
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="LEOViz | Starlink metrics collection")
-
-    parser.add_argument("--run-once", action="store_true", help="Run once and exit")
-    parser.add_argument("--lat", type=float, required=False, help="Dish latitude")
-    parser.add_argument("--lon", type=float, required=False, help="Dish longitude")
-    parser.add_argument("--alt", type=float, required=False, help="Dish altitude")
-    parser.add_argument("--mobile", type=bool, required=False, help="Dish is in mobile mode")
-    args = parser.parse_args()
-
-    print_config()
-
-    config.MOBILE = bool(args.mobile)
-
-    if config.MOBILE:
-        # Mobile mode: schedule location updates via gRPC
+    @staticmethod
+    def setup_mobile_schedule() -> None:
+        """Set up additional schedules for mobile installations."""
         schedule.every().hour.at(":00").do(run, grpc_get_location).tag("gRPC")
-    else:
-        # Fixed mode: use provided coordinates, if available
+
+    @staticmethod
+    def log_schedule_info() -> None:
+        """Log information about scheduled tasks."""
+        for category in ["Latency", "TLE", "gRPC"]:
+            for job in schedule.get_jobs(category):
+                logger.info(f"[{category}]: {job.next_run}")
+
+    @staticmethod
+    def run_scheduled_tasks() -> None:
+        """Run all scheduled tasks."""
+        while True:
+            schedule.run_pending()
+            time.sleep(0.5)
+
+class ConfigManager:
+    """Manages configuration settings."""
+    
+    @staticmethod
+    def parse_arguments() -> argparse.Namespace:
+        """Parse command line arguments."""
+        parser = argparse.ArgumentParser(description="LEOViz | Starlink metrics collection")
+        
+        parser.add_argument(
+            "--run-once",
+            action="store_true",
+            help="Run once and exit"
+        )
+        parser.add_argument(
+            "--lat",
+            type=float,
+            required=False,
+            help="Dish latitude"
+        )
+        parser.add_argument(
+            "--lon",
+            type=float,
+            required=False,
+            help="Dish longitude"
+        )
+        parser.add_argument(
+            "--alt",
+            type=float,
+            required=False,
+            help="Dish altitude"
+        )
+        parser.add_argument(
+            "--mobile",
+            type=bool,
+            required=False,
+            help="Dish is in mobile mode"
+        )
+        
+        return parser.parse_args()
+
+    @staticmethod
+    def configure_mobile_mode(args: argparse.Namespace) -> None:
+        """Configure settings for mobile installations."""
+        config.MOBILE = bool(args.mobile)
+        if config.MOBILE:
+            Scheduler.setup_mobile_schedule()
+        else:
+            ConfigManager.configure_static_location(args)
+
+    @staticmethod
+    def configure_static_location(args: argparse.Namespace) -> None:
+        """Configure settings for static installations."""
         if all([args.lat, args.lon, args.alt]):
             config.LATITUDE = args.lat
             config.LONGITUDE = args.lon
             config.ALTITUDE = args.alt
         else:
-            logger.warning("Latitude, Longitude and Altitude not provided. Won't estimate connected satellites.")
+            logger.warning(
+                "Latitude, Longitude and Altitude not provided. "
+                "Won't estimate connected satellites."
+            )
 
+def main() -> None:
+    """Main entry point for the application."""
+    # Parse command line arguments
+    args = ConfigManager.parse_arguments()
+    
+    # Print current configuration
+    print_config()
+    
+    # Configure based on installation type
+    ConfigManager.configure_mobile_mode(args)
+    
+    # Set up scheduled tasks
+    Scheduler.setup_schedules()
+    
     if args.run_once:
         schedule.run_all()
     else:
-        for job in schedule.get_jobs("Latency"):
-            logger.info("[Latency]: {}".format(job.next_run))
-        for job in schedule.get_jobs("TLE"):
-            logger.info("[TLE]: {}".format(job.next_run))
-        for job in schedule.get_jobs("gRPC"):
-            logger.info("[gRPC]: {}".format(job.next_run))
+        Scheduler.log_schedule_info()
+        Scheduler.run_scheduled_tasks()
 
-        while True:
-            schedule.run_pending()
-            time.sleep(0.5)
+if __name__ == "__main__":
+    main()
