@@ -4,21 +4,22 @@ import logging
 import argparse
 import schedule
 from typing import Optional, Callable, Any
+from datetime import datetime, timedelta
 
 import config
 from latency import icmp_ping
 from dish import (
-    grpc_get_status,
     monitor_dish_state,
-    get_obstruction_map,
-    grpc_get_location,
+    get_obstruction_map
 )
-from util import run, load_tle
+from util import run, load_tle, ensure_directory, get_timestamp_str, get_date_str
 from config import print_config
-
+from data_processor import DataProcessor
+from satellite_matching_estimation import SatelliteProcessor
+from location_provider import LocationProvider
+from timeslot_manager import TimeslotManager
 
 logger = logging.getLogger(__name__)
-
 
 class Scheduler:
     """Manages scheduling of various data collection tasks."""
@@ -30,7 +31,7 @@ class Scheduler:
         schedule.every(1).hours.at(":00").do(run, icmp_ping).tag("Latency")
         
         # gRPC data collection
-        schedule.every(1).hours.at(":00").do(run, grpc_get_status).tag("gRPC")
+        # schedule.every(1).hours.at(":00").do(run, grpc_get_status).tag("gRPC")
         schedule.every(1).hours.at(":00").do(run, get_obstruction_map).tag("gRPC")
         schedule.every(1).hours.at(":00").do(run, monitor_dish_state).tag("gRPC")
         
@@ -40,7 +41,7 @@ class Scheduler:
     @staticmethod
     def setup_mobile_schedule() -> None:
         """Set up additional schedules for mobile installations."""
-        schedule.every().hour.at(":00").do(run, grpc_get_location).tag("gRPC")
+        # schedule.every().hour.at(":00").do(run, grpc_get_location).tag("gRPC")
 
     @staticmethod
     def log_schedule_info() -> None:
@@ -100,9 +101,7 @@ class ConfigManager:
     def configure_mobile_mode(args: argparse.Namespace) -> None:
         """Configure settings for mobile installations."""
         config.MOBILE = bool(args.mobile)
-        if config.MOBILE:
-            Scheduler.setup_mobile_schedule()
-        else:
+        if not config.MOBILE:
             ConfigManager.configure_static_location(args)
 
     @staticmethod

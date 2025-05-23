@@ -1,7 +1,6 @@
-import time
 import logging
-from datetime import datetime, timezone, timedelta
-from typing import Tuple
+from datetime import datetime, timedelta, timezone
+from typing import List, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -29,14 +28,3 @@ class TimeslotManager:
         if current_second >= 57:
             next_start += timedelta(minutes=1)
         return 12, next_start
-
-    @staticmethod
-    def wait_until_target_time(last_timeslot_second: int) -> int:
-        """Wait until the next timeslot starts."""
-        while True:
-            current_second = datetime.now(timezone.utc).second
-            for start, end in TimeslotManager.TIMESLOT_INTERVALS:
-                if start <= current_second < end and last_timeslot_second != start:
-                    logger.info(f"Current timeslot starts at second: {start}")
-                    return start
-            time.sleep(0.1) 

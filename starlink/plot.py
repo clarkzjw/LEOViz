@@ -6,6 +6,7 @@ from copy import deepcopy
 from pathlib import Path
 from datetime import datetime
 from multiprocessing import Pool
+from typing import List, Any
 
 import pandas as pd
 import cartopy
@@ -470,6 +471,167 @@ def create_video(fps, filename):
     cmd = f"ffmpeg -framerate {fps} -pattern_type glob -i '{FIGURE_DIR}/*.png' -pix_fmt yuv420p -c:v libx264 {filename}.mp4 -y"
     subprocess.run(cmd, shell=True, check=True)
     print(f"Video created: {filename}.mp4")
+
+
+def plot_data(df_obstruction_map: pd.DataFrame, df_rtt: pd.DataFrame,
+             df_status: pd.DataFrame, df_location: pd.DataFrame,
+             all_satellites: List[str], timestamp_str: str) -> None:
+    """Plot data for a specific timestamp."""
+    try:
+        # Create figure with subplots
+        fig = plt.figure(figsize=(15, 10))
+        gs01 = fig.add_gridspec(4, 2, height_ratios=[1, 1, 1, 1])
+
+        # Plot RTT data
+        axFullRTT = fig.add_subplot(gs01[0, :])
+        if not df_rtt.empty:
+            axFullRTT.plot(
+                df_rtt["timestamp"],
+                df_rtt["rtt"],
+                color="blue",
+                label="RTT",
+            )
+            axFullRTT.axvline(
+                x=pd.to_datetime(timestamp_str, utc=True),
+                color="red",
+                linestyle="--",
+                label="Selected Time",
+            )
+            axFullRTT.set_title("RTT")
+            axFullRTT.set_ylabel("RTT (ms)")
+            axFullRTT.legend()
+
+        # Plot SINR data
+        axFullSINR = fig.add_subplot(gs01[1, :], sharex=axFullRTT)
+        if not df_status.empty:
+            axFullSINR.plot(
+                df_status["timestamp"],
+                df_status["sinr"],
+                color="green",
+                label="SINR",
+            )
+            axFullSINR.axvline(
+                x=pd.to_datetime(timestamp_str, utc=True),
+                color="red",
+                linestyle="--",
+                label="Selected Time",
+            )
+            axFullSINR.set_title("SINR")
+            axFullSINR.set_ylabel("SINR (dB)")
+            axFullSINR.legend()
+
+        # Plot location data
+        axLocation = fig.add_subplot(gs01[2, :], sharex=axFullRTT)
+        if not df_location.empty:
+            axLocation.plot(
+                df_location["utc_time"],
+                df_location["lat"],
+                color="purple",
+                label="Latitude",
+            )
+            axLocation.plot(
+                df_location["utc_time"],
+                df_location["lon"],
+                color="orange",
+                label="Longitude",
+            )
+            axLocation.axvline(
+                x=pd.to_datetime(timestamp_str, utc=True),
+                color="red",
+                linestyle="--",
+                label="Selected Time",
+            )
+            axLocation.set_title("Location")
+            axLocation.set_ylabel("Degrees")
+            axLocation.legend()
+
+        # Plot zoomed data
+        zoom_start = pd.to_datetime(timestamp_str, utc=True) - pd.Timedelta(minutes=5)
+        zoom_end = pd.to_datetime(timestamp_str, utc=True) + pd.Timedelta(minutes=5)
+
+        # Zoomed RTT
+        axRTT = fig.add_subplot(gs01[3, 0])
+        if not df_rtt.empty:
+            df_rtt_zoomed = df_rtt[
+                (df_rtt["timestamp"] >= zoom_start) & (df_rtt["timestamp"] <= zoom_end)
+            ]
+            axRTT.plot(
+                df_rtt_zoomed["timestamp"],
+                df_rtt_zoomed["rtt"],
+                color="blue",
+                label="RTT",
+            )
+            axRTT.axvline(
+                x=pd.to_datetime(timestamp_str, utc=True),
+                color="red",
+                linestyle="--",
+                label="Selected Time",
+            )
+            axRTT.set_title(f"RTT at {timestamp_str}")
+            axRTT.set_ylabel("RTT (ms)")
+            axRTT.legend()
+
+        # Zoomed SINR
+        axSINR = fig.add_subplot(gs01[3, 1], sharex=axRTT)
+        if not df_status.empty:
+            df_status_zoomed = df_status[
+                (df_status["timestamp"] >= zoom_start) & (df_status["timestamp"] <= zoom_end)
+            ]
+            axSINR.plot(
+                df_status_zoomed["timestamp"],
+                df_status_zoomed["sinr"],
+                color="green",
+                label="SINR",
+            )
+            axSINR.axvline(
+                x=pd.to_datetime(timestamp_str, utc=True),
+                color="red",
+                linestyle="--",
+                label="Selected Time",
+            )
+            axSINR.set_title(f"SINR at {timestamp_str}")
+            axSINR.set_ylabel("SINR (dB)")
+            axSINR.legend()
+
+        plt.tight_layout()
+        plt.show()
+
+    except Exception as e:
+        logger.error(f"Error plotting data: {str(e)}", exc_info=True)
+
+def main() -> None:
+    """Main function to plot data."""
+    try:
+        # Get data files
+        STATUS_DATA = Path(DATA_DIR).joinpath(f"grpc/{DATE}/GRPC_STATUS-{DATE_TIME}.csv")
+        LOCATION_DATA = Path(DATA_DIR).joinpath(f"grpc/{DATE}/GRPC_LOCATION-{DATE_TIME}.csv")
+        RTT_DATA = Path(DATA_DIR).joinpath(f"rtt/{DATE}/RTT-{DATE_TIME}.csv")
+        OBSTRUCTION_DATA = Path(DATA_DIR).joinpath(f"obstruction-data-{DATE_TIME}.csv")
+
+        # Read data
+        df_status = pd.read_csv(STATUS_DATA)
+        df_location = pd.read_csv(LOCATION_DATA)
+        df_rtt = pd.read_csv(RTT_DATA)
+        df_obstruction_map = pd.read_csv(OBSTRUCTION_DATA)
+
+        # Convert timestamps
+        if not df_status.empty:
+            df_status["timestamp"] = pd.to_datetime(df_status["timestamp"], unit='s', utc=True)
+        if not df_location.empty:
+            df_location["utc_time"] = pd.to_datetime(df_location["utc_time"], utc=True)
+        if not df_rtt.empty:
+            df_rtt["timestamp"] = pd.to_datetime(df_rtt["timestamp"], unit='s', utc=True)
+
+        # Get all satellites
+        all_satellites = df_obstruction_map["satellite"].unique().tolist()
+
+        # Plot data for each timestamp
+        for _, row in df_obstruction_map.iterrows():
+            timestamp_str = row["Timestamp"]
+            plot_data(df_obstruction_map, df_rtt, df_status, df_location, all_satellites, timestamp_str)
+
+    except Exception as e:
+        logger.error(f"Error in main: {str(e)}", exc_info=True)
 
 
 if __name__ == "__main__":

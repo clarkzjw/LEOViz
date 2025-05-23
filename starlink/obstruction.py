@@ -1,14 +1,88 @@
 import csv
 import logging
-from datetime import datetime, timezone
-
-from config import DATA_DIR
-
-import cv2
+from datetime import datetime
+from typing import List, Tuple, Optional
 import pandas as pd
 import numpy as np
 
+from config import DATA_DIR
+from timeslot_manager import TimeslotManager
+
+import cv2
+
 logger = logging.getLogger(__name__)
+
+
+def process_obstruction_data(df_obstruction_map: pd.DataFrame) -> List[Tuple[datetime, float, float]]:
+    """Process obstruction data and return list of timestamps and angles."""
+    try:
+        results = []
+        for _, row in df_obstruction_map.iterrows():
+            timestamp_dt = pd.to_datetime(row["timestamp"], unit='s')
+            elevation = row["elevation"]
+            azimuth = row["azimuth"]
+            results.append((timestamp_dt, elevation, azimuth))
+        return results
+    except Exception as e:
+        logger.error(f"Error processing obstruction data: {str(e)}", exc_info=True)
+        return []
+
+
+def get_time_range(df_obstruction_map: pd.DataFrame) -> Tuple[datetime, datetime]:
+    """Get start and end times from obstruction map."""
+    try:
+        start_time = pd.to_datetime(
+            df_obstruction_map.iloc[0]["timestamp"], unit='s'
+        )
+        end_time = pd.to_datetime(
+            df_obstruction_map.iloc[-1]["timestamp"], unit='s'
+        )
+        return start_time, end_time
+    except Exception as e:
+        logger.error(f"Error getting time range: {str(e)}", exc_info=True)
+        return None, None
+
+
+def calculate_obstruction_angles(df_obstruction_map: pd.DataFrame) -> Optional[pd.DataFrame]:
+    """Calculate obstruction angles from obstruction map."""
+    try:
+        # Convert timestamps
+        df_obstruction_map["timestamp"] = pd.to_datetime(
+            df_obstruction_map["timestamp"], unit='s'
+        )
+
+        # Calculate angles
+        df_obstruction_map["angle"] = np.arctan2(
+            df_obstruction_map["elevation"],
+            df_obstruction_map["azimuth"]
+        )
+
+        return df_obstruction_map
+
+    except Exception as e:
+        logger.error(f"Error calculating obstruction angles: {str(e)}", exc_info=True)
+        return None
+
+
+def process_obstruction_map(df_obstruction_map: pd.DataFrame) -> Optional[pd.DataFrame]:
+    """Process obstruction map data."""
+    try:
+        # Convert timestamps
+        df_obstruction_map["timestamp"] = pd.to_datetime(
+            df_obstruction_map["timestamp"], unit='s'
+        )
+
+        # Process data
+        for _, row in df_obstruction_map.iterrows():
+            timestamp_dt = pd.to_datetime(row["timestamp"], unit='s')
+            # Process each row as needed
+            pass
+
+        return df_obstruction_map
+
+    except Exception as e:
+        logger.error(f"Error processing obstruction map: {str(e)}", exc_info=True)
+        return None
 
 
 def process_obstruction_timeslot(timeslot_df, writer):
@@ -18,7 +92,7 @@ def process_obstruction_timeslot(timeslot_df, writer):
     hold_coord = None
     white_pixel_coords = []
     for index, row in timeslot_df.iterrows():
-        timestamp_dt = datetime.fromtimestamp(row["timestamp"], tz=timezone.utc)
+        timestamp_dt = pd.to_datetime(row["timestamp"], unit='s')
         obstruction_map = row["obstruction_map"].reshape(123, 123)
         xor_map = np.bitwise_xor(previous_obstruction_map, obstruction_map)
         coords = np.argwhere(xor_map == 1)
@@ -45,11 +119,11 @@ def process_obstruction_timeslot(timeslot_df, writer):
 
 
 def process_obstruction_maps(df_obstruction_map, uuid):
-    start_time_dt = datetime.fromtimestamp(
-        df_obstruction_map.iloc[0]["timestamp"], tz=timezone.utc
+    start_time_dt = pd.to_datetime(
+        df_obstruction_map.iloc[0]["timestamp"], unit='s'
     )
-    end_time_dt = datetime.fromtimestamp(
-        df_obstruction_map.iloc[-1]["timestamp"], tz=timezone.utc
+    end_time_dt = pd.to_datetime(
+        df_obstruction_map.iloc[-1]["timestamp"], unit='s'
     )
 
     with open(
@@ -58,40 +132,23 @@ def process_obstruction_maps(df_obstruction_map, uuid):
         newline="",
     ) as csvfile:
         writer = csv.writer(csvfile)
-        while start_time_dt < end_time_dt:
-            if start_time_dt.second >= 12 and start_time_dt.second < 27:
-                timeslot_endtime_dt = start_time_dt.replace(microsecond=0).replace(
-                    second=27
-                )
-            elif start_time_dt.second >= 27 and start_time_dt.second < 42:
-                timeslot_endtime_dt = start_time_dt.replace(microsecond=0).replace(
-                    second=42
-                )
-            elif start_time_dt.second >= 42 and start_time_dt.second < 57:
-                timeslot_endtime_dt = start_time_dt.replace(microsecond=0).replace(
-                    second=57
-                )
-            elif start_time_dt.second >= 57 and start_time_dt.second < 60:
-                timeslot_endtime_dt = start_time_dt.replace(microsecond=0).replace(
-                    second=12
-                ) + pd.Timedelta(minutes=1)
-            elif start_time_dt.second >= 0 and start_time_dt.second < 12:
-                timeslot_endtime_dt = start_time_dt.replace(microsecond=0).replace(
-                    second=12
-                )
-            else:
-                pass
+        current_time = start_time_dt
 
-            print(start_time_dt)
-            print(end_time_dt)
+        while current_time < end_time_dt:
+            # Get next timeslot
+            _, timeslot_endtime_dt = TimeslotManager.get_next_timeslot()
+            
+            # Adjust timeslot end time to match our data's timezone
+            timeslot_endtime_dt = timeslot_endtime_dt.replace(tzinfo=current_time.tzinfo)
 
+            # Get data for current timeslot
             timeslot_df = df_obstruction_map[
-                (df_obstruction_map["timestamp"] >= start_time_dt.timestamp())
+                (df_obstruction_map["timestamp"] >= current_time.timestamp())
                 & (df_obstruction_map["timestamp"] < timeslot_endtime_dt.timestamp())
             ]
 
             if len(timeslot_df) == 0:
-                start_time_dt += pd.Timedelta(seconds=15)
+                current_time += pd.Timedelta(seconds=15)
                 continue
 
             previous_obstruction_map = timeslot_df.iloc[0]["obstruction_map"]
@@ -100,7 +157,7 @@ def process_obstruction_maps(df_obstruction_map, uuid):
             hold_coord = None
             white_pixel_coords = []
             for index, row in timeslot_df.iterrows():
-                timestamp_dt = datetime.fromtimestamp(row["timestamp"], tz=timezone.utc)
+                timestamp_dt = pd.to_datetime(row["timestamp"], unit='s')
                 obstruction_map = row["obstruction_map"].reshape(123, 123)
                 xor_map = np.bitwise_xor(previous_obstruction_map, obstruction_map)
                 coords = np.argwhere(xor_map == 1)
@@ -125,7 +182,7 @@ def process_obstruction_maps(df_obstruction_map, uuid):
                     ]
                 )
 
-            start_time_dt += pd.Timedelta(seconds=15)
+            current_time = timeslot_endtime_dt
 
 
 def create_obstruction_map_video(FILENAME, uuid, fps):
