@@ -36,89 +36,84 @@ logger = logging.getLogger(__name__)
 GRPC_DATA_DIR = f"{DATA_DIR}/grpc"
 GRPC_TIMEOUT = 10
 
-def get_dish_data(status_cmd: GrpcCommand, diagnostics_cmd: Optional[GrpcCommand] = None) -> tuple[Optional[List[Any]], Optional[List[Any]]]:
-    """Get dish status and location data for the current timestamp."""
-    try:
-        status_data = status_cmd.execute()
-        if not status_data:
-            return None, None
-
-        dish_status = status_data.get("dishGetStatus")
-        if not dish_status or "alignmentStats" not in dish_status:
-            logger.warning("Missing dishGetStatus or alignmentStats in status data")
-            return None, None
-
-        current_time = time.time()
-        status_row = DataProcessor.extract_status_fields(dish_status, current_time)
-        location_row = None
-
-        if diagnostics_cmd:
-            diagnostics_data = diagnostics_cmd.execute()
-            if diagnostics_data:
-                location_row = DataProcessor.extract_location_fields(diagnostics_data, current_time)
-            else:
-                logger.error("Failed to get diagnostics data")
-
-        return status_row, location_row
-    except Exception as e:
-        logger.error(f"Error getting dish data: {str(e)}")
-        return None, None
-
-def monitor_dish_state() -> None:
+def grpc_status_job() -> None:
     """Collect dish status data over time."""
-    name = "GRPC_DishState"
+    name = "GRPC_DishStatus"
     logger.info(f"{name}, {threading.current_thread()}")
 
-    # Generate filenames with current timestamp
+    # Generate filename with current timestamp
     dt_string = date_time_string()
     date = ensure_data_directory(GRPC_DATA_DIR)
     status_filename = f"{GRPC_DATA_DIR}/{date}/GRPC_STATUS-{dt_string}.csv"
-    location_filename = f"{GRPC_DATA_DIR}/{date}/GRPC_LOCATION-{dt_string}.csv" if config.MOBILE else None
-    
-    # Create GRPC command for status
-    status_cmd = GrpcCommand("status", '{"get_status":{}}')
-    location_cmd = GrpcCommand("diagnostics", '{"get_diagnostics":{}}') if config.MOBILE else None
 
-    # Open CSV files for writing
+    # Open CSV file for writing
     with open(status_filename, "w", newline="") as status_file:
         status_writer = csv.writer(status_file)
         DataProcessor.write_status_csv_header(status_writer)
 
-        # Open location file if mobile installation
-        location_file = None
-        location_writer = None
-        if config.MOBILE and location_filename:
-            location_file = open(location_filename, "w", newline="")
-            location_writer = csv.writer(location_file)
-            DataProcessor.write_location_csv_header(location_writer)
-
+        grpc = GrpcCommand()
+        
         try:
             # Record start time for duration tracking
             start_time = time.time()
             
             # Collect data for specified duration
             while time.time() < start_time + DURATION_SECONDS:
-                # Get status data
-                status_row, location_row = get_dish_data(status_cmd, location_cmd)
-                
+                # Get status data with current time
+                current_time = time.time()
+                status_row = grpc.status(current_time)
                 if status_row:
                     status_writer.writerow(status_row)
                     status_file.flush()
-
-                if location_row and location_writer:
-                    location_writer.writerow(location_row)
-                    location_file.flush()
                 
                 time.sleep(0.5)
 
             logger.info(f"Dish status data saved to {status_filename}")
-            if location_filename:
-                logger.info(f"Location data saved to {location_filename}")
 
-        finally:
-            # Ensure location file is closed
-            if location_file:
-                location_file.close()
+        except Exception as e:
+            logger.error(f"Error monitoring dish status: {str(e)}", exc_info=True)
+
+def grpc_gps_diagnostics_job() -> None:
+    """Collect GPS diagnostics data over time."""
+    if not config.MOBILE:
+        logger.info("Skipping GPS diagnostics collection - not in mobile mode")
+        return
+
+    name = "GRPC_GPSDiagnostics"
+    logger.info(f"{name}, {threading.current_thread()}")
+
+    # Generate filename with current timestamp
+    dt_string = date_time_string()
+    date = ensure_data_directory(GRPC_DATA_DIR)
+    gps_diagnostics = f"{GRPC_DATA_DIR}/{date}/GRPC_LOCATION-{dt_string}.csv"
+
+    # Open CSV file for writing
+    with open(gps_diagnostics, "w", newline="") as gps_diagnostics_file:
+        gps_diagnostics_writer = csv.writer(gps_diagnostics_file)
+        DataProcessor.write_location_csv_header(gps_diagnostics_writer)
+
+        grpc = GrpcCommand()
+        
+        try:
+            # Record start time for duration tracking
+            start_time = time.time()
+            
+            # Collect data for specified duration
+            while time.time() < start_time + DURATION_SECONDS:
+                # Get GPS diagnostics data with current time
+                current_time = time.time()
+                gps_diagnostics_row = grpc.gps_diagnostics(current_time)
+                if gps_diagnostics_row:
+                    gps_diagnostics_writer.writerow(gps_diagnostics_row)
+                    gps_diagnostics_file.flush()
+                
+                time.sleep(0.5)
+
+            logger.info(f"Location data saved to {gps_diagnostics}")
+
+        except Exception as e:
+            logger.error(f"Error monitoring GPS diagnostics: {str(e)}", exc_info=True)
+
 
 def get_obstruction_map() -> None:
     """Collect and process obstruction map data."""
@@ -145,14 +140,39 @@ def get_obstruction_map() -> None:
     with open(obstruction_data_filename, "w", newline="") as csvfile:
         writer = csv.writer(csvfile)
         writer.writerow(['timestamp', 'Y', 'X'])
-        context = starlink_grpc.ChannelContext(target=STARLINK_GRPC_ADDR_PORT)
+        grpc = GrpcCommand()
+        context = starlink_grpc.ChannelContext(target=config.STARLINK_GRPC_ADDR_PORT)
+        last_timeslot_second = None
 
-        # Collect data for specified duration
         while time.time() < start + DURATION_SECONDS:
             try:
+                if last_timeslot_second is None:
+                    now = datetime.now(timezone.utc)
+                    if now.second >= 12 and now.second < 27:
+                        start_time = now.replace(microsecond=0).replace(second=27)
+                        last_timeslot_second = 27
+                    elif now.second >= 27 and now.second < 42:
+                        start_time = now.replace(microsecond=0).replace(second=42)
+                        last_timeslot_second = 42
+                    elif now.second >= 42 and now.second < 57:
+                        start_time = now.replace(microsecond=0).replace(second=57)
+                        last_timeslot_second = 57
+                    elif now.second >= 57 and now.second < 60:
+                        start_time = now.replace(microsecond=0).replace(
+                            second=12
+                        ) + timedelta(minutes=1)
+                        last_timeslot_second = 12
+                    elif now.second >= 0 and now.second < 12:
+                        start_time = now.replace(microsecond=0).replace(second=12)
+                        last_timeslot_second = 12
+
+                    while datetime.now(timezone.utc) < start_time:
+                        time.sleep(0.1)
+                else:
+                    last_timeslot_second = wait_until_target_time(last_timeslot_second)
+
                 # Reset obstruction map for new data collection
-                starlink_grpc.reset_obstruction_map(context)
-                logger.info("Resetting dish obstruction map")
+                grpc.reset_obstruction_map()
                 timeslot_start = time.time()
 
                 # Collect data for the duration of one timeslot
@@ -214,7 +234,7 @@ def process_obstruction_estimate_satellites_per_timeslot(timeslot_df: pd.DataFra
 
         # Get status and location data files
         status_filename = f"{GRPC_DATA_DIR}/{date}/GRPC_STATUS-{dt_string}.csv"
-        location_filename = f"{GRPC_DATA_DIR}/{date}/GRPC_LOCATION-{dt_string}.csv"
+        gps_diagnostics_filename = f"{GRPC_DATA_DIR}/{date}/GRPC_LOCATION-{dt_string}.csv"
 
         if not os.path.exists(status_filename):
             logger.error(f"Status file not found: {status_filename}")
@@ -224,13 +244,14 @@ def process_obstruction_estimate_satellites_per_timeslot(timeslot_df: pd.DataFra
         df_status = pd.read_csv(status_filename)
 
         # Handle location data based on installation type
-        df_location = None
+        gps_diagnostics_df = None
         if config.MOBILE:
-            if not os.path.exists(location_filename):
-                logger.error(f"Location file not found: {location_filename}")
+            if not os.path.exists(gps_diagnostics_filename):
+                logger.error(f"Location file not found: {gps_diagnostics_filename}")
                 return
-            df_location = pd.read_csv(location_filename)
-            if not all(col in df_location.columns for col in ['timestamp', 'lat', 'lon', 'alt']):
+                
+            gps_diagnostics_df = pd.read_csv(gps_diagnostics_filename)
+            if not all(col in gps_diagnostics_df.columns for col in ['timestamp', 'lat', 'lon', 'alt']):
                 logger.error("Missing required columns in location file for mobile installation")
                 return
 
@@ -241,26 +262,7 @@ def process_obstruction_estimate_satellites_per_timeslot(timeslot_df: pd.DataFra
             timeslot_df.iloc[-1]["timestamp"],
         )
 
-        if merged_df is not None and not merged_df.empty:
-            # Save serving satellite data
-            serving_satellite_file = f"{DATA_DIR}/serving_satellite_data-{dt_string}.csv"
-            
-            # Ensure the directory exists
-            os.makedirs(os.path.dirname(serving_satellite_file), exist_ok=True)
-            
-            # Format the data
-            merged_df['Timestamp'] = pd.to_datetime(merged_df['Timestamp']).dt.strftime('%Y-%m-%d %H:%M:%S%z')
-            
-            # Write header if file doesn't exist
-            if not os.path.exists(serving_satellite_file):
-                with open(serving_satellite_file, 'w', newline='') as f:
-                    writer = csv.writer(f)
-                    writer.writerow(['Timestamp', 'Y', 'X', 'Elevation', 'Azimuth', 'Connected_Satellite', 'Distance'])
-            
-            # Append data to CSV file
-            merged_df.to_csv(serving_satellite_file, mode='a', header=False, index=False)
-            logger.info(f"Saved serving satellite data to {serving_satellite_file}")
-        else:
+        if merged_df is None or merged_df.empty:
             logger.warning("No satellite data to save")
 
     except Exception as e:
@@ -295,3 +297,26 @@ def get_obstruction_map_frame_type() -> Tuple[int, str]:
     }.get(map.map_reference_frame, "UNKNOWN")
     
     return map.map_reference_frame, frame_type
+
+def wait_until_target_time(last_timeslot_second: int) -> int:
+    """Wait until the next timeslot and return the next timeslot second."""
+    now = datetime.now(timezone.utc)
+    next_timeslot_second = None
+
+    if last_timeslot_second == 12:
+        next_timeslot_second = 27
+    elif last_timeslot_second == 27:
+        next_timeslot_second = 42
+    elif last_timeslot_second == 42:
+        next_timeslot_second = 57
+    elif last_timeslot_second == 57:
+        next_timeslot_second = 12
+        # If we're moving to the next minute
+        if now.second >= 57:
+            now = now + timedelta(minutes=1)
+
+    target_time = now.replace(microsecond=0).replace(second=next_timeslot_second)
+    while datetime.now(timezone.utc) < target_time:
+        time.sleep(0.1)
+
+    return next_timeslot_second

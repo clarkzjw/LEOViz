@@ -173,96 +173,105 @@ class SatelliteProcessor:
         return distances
 
     @staticmethod
-    def process_intervals(filename: str, start_year: int, start_month: int, start_day: int,
-                         start_hour: int, start_minute: int, start_second: int,
-                         end_year: int, end_month: int, end_day: int,
-                         end_hour: int, end_minute: int, end_second: int,
-                         merged_data_file: str, satellites: List[Any], frame_type: int,
-                         df_location: Optional[pd.DataFrame] = None) -> Optional[pd.DataFrame]:
+    def process(
+        filename: str,
+        year: int,
+        month: int,
+        day: int,
+        hour: int,
+        minute: int,
+        second: int,
+        merged_data_file: str,
+        satellites: List[Any],
+        frame_type: int,
+        df_gps_diagnostics: Optional[pd.DataFrame] = None
+    ) -> Tuple[Optional[List[Tuple[datetime, Tuple[float, float]]]], 
+              Optional[List[str]], 
+              Optional[List[float]]]:
+        """Process a single time interval to find matching satellites."""
+        initial_time = datetime(year, month, day, hour, minute, second, tzinfo=timezone.utc)
+        
+        # Get observer location based on installation type
+        observer_location = LocationProvider.get_observer_location(df_gps_diagnostics)
+        if observer_location is None:
+            logger.error("Failed to get observer location")
+            return None, None, None
+
+        # Get observed positions using the existing method
+        observed_positions_with_timestamps = DataProcessor.process_observed_data(
+            filename, initial_time.strftime("%Y-%m-%dT%H:%M:%SZ"), merged_data_file
+        )
+        if observed_positions_with_timestamps is None:
+            return None, None, None
+
+        # Find matching satellites
+        matching_satellites = SatelliteProcessor.find_matching_satellites(
+            satellites, observer_location, observed_positions_with_timestamps, frame_type
+        )
+        if not matching_satellites:
+            return observed_positions_with_timestamps, [], []
+
+        # Calculate distances for the best match
+        best_match_satellite = next(
+            sat for sat in satellites if sat.name == matching_satellites[0]
+        )
+        distances = SatelliteProcessor.calculate_distance_for_best_match(
+            best_match_satellite, observer_location, initial_time, 14
+        )
+
+        return observed_positions_with_timestamps, matching_satellites, distances
+
+    @staticmethod
+    def process_intervals(
+        filename: str,
+        start_year: int,
+        start_month: int,
+        start_day: int,
+        start_hour: int,
+        start_minute: int,
+        start_second: int,
+        end_year: int,
+        end_month: int,
+        end_day: int,
+        end_hour: int,
+        end_minute: int,
+        end_second: int,
+        merged_data_file: str,
+        satellites: List[Any],
+        frame_type: int,
+        df_gps_diagnostics: Optional[pd.DataFrame] = None
+    ) -> Optional[pd.DataFrame]:
         """Process data in intervals and find matching satellites."""
         try:
-            # Read the merged data
-            df = pd.read_csv(merged_data_file)
-            df['timestamp'] = pd.to_datetime(df['timestamp'], utc=True)
-            
             # Create datetime objects for start and end times
             start_time = datetime(start_year, start_month, start_day, start_hour, start_minute, start_second, tzinfo=timezone.utc)
             end_time = datetime(end_year, end_month, end_day, end_hour, end_minute, end_second, tzinfo=timezone.utc)
             
-            # Filter data for the time range
-            mask = (df['timestamp'] >= start_time) & (df['timestamp'] <= end_time)
-            df = df[mask]
-            
-            if df.empty:
-                logger.warning(f"No data found in the specified time range {start_time} to {end_time}")
-                return None
-            
-            # Process each interval (15-second chunks)
             results = []
             current_time = start_time
             
             while current_time <= end_time:
                 logger.info(f"Estimating connected satellites for timeslot {current_time}")
                 
-                # Look at the last 15 seconds of data
-                window_start = current_time - timedelta(seconds=15)
-                window_mask = (df['timestamp'] >= window_start) & (df['timestamp'] <= current_time)
-                window_df = df[window_mask]
-                
-                if window_df.empty:
-                    logger.warning(f"No data found for timestamp {current_time}")
-                    current_time += timedelta(seconds=15)
-                    continue
-                
-                # Get start, middle, and end positions from the window
-                if len(window_df) == 1:
-                    # If we only have one data point, use it for all positions
-                    start_data = middle_data = end_data = window_df.iloc[0]
-                else:
-                    # Get start, middle, and end positions from the window
-                    start_data = window_df.iloc[0]
-                    middle_data = window_df.iloc[len(window_df) // 2]
-                    end_data = window_df.iloc[-1]
-                
-                # Calculate positions with proper elevation/azimuth conversion
-                positions = [
-                    (start_data['timestamp'], (90 - start_data['Y'], start_data['X'])),
-                    (middle_data['timestamp'], (90 - middle_data['Y'], middle_data['X'])),
-                    (end_data['timestamp'], (90 - end_data['Y'], end_data['X']))
-                ]
-                
-                # Get observer location for the middle point
-                observer_location = LocationProvider.get_observer_location(
-                    df_location if config.MOBILE else None,
-                    middle_data['timestamp'].timestamp() if config.MOBILE else None
-                )
-                
-                if observer_location is None:
-                    logger.warning(f"Could not get observer location for timestamp {middle_data['timestamp']}")
-                    current_time += timedelta(seconds=15)
-                    continue
-                
-                # Find matching satellites
-                matching_satellites = SatelliteProcessor.find_matching_satellites(
-                    satellites, observer_location, positions, frame_type
+                observed_positions_with_timestamps, matching_satellites, distances = SatelliteProcessor.process(
+                    filename,
+                    current_time.year,
+                    current_time.month,
+                    current_time.day,
+                    current_time.hour,
+                    current_time.minute,
+                    current_time.second,
+                    merged_data_file,
+                    satellites,
+                    frame_type,
+                    df_gps_diagnostics
                 )
                 
                 if matching_satellites:
-                    # Calculate distance for the best match
-                    best_match_satellite = next(sat for sat in satellites if sat.name == matching_satellites[0])
-                    distances = SatelliteProcessor.calculate_distance_for_best_match(
-                        best_match_satellite, observer_location, current_time, 14
-                    )
-                    
-                    # Add results for each second in the interval
                     for second in range(15):
                         if second < len(distances):
                             results.append({
                                 'Timestamp': current_time + timedelta(seconds=second),
-                                'Y': middle_data['Y'],
-                                'X': middle_data['X'],
-                                'Elevation': 90 - middle_data['Y'],
-                                'Azimuth': middle_data['X'],
                                 'Connected_Satellite': matching_satellites[0],
                                 'Distance': distances[second]
                             })
@@ -273,11 +282,7 @@ class SatelliteProcessor:
                 logger.warning("No data points processed")
                 return None
             
-            # Create result DataFrame with exact column order
-            result_df = pd.DataFrame(results)
-            result_df = result_df[['Timestamp', 'Y', 'X', 'Elevation', 'Azimuth', 'Connected_Satellite', 'Distance']]
-            
-            return result_df
+            return pd.DataFrame(results)
             
         except Exception as e:
             logger.error(f"Error processing intervals: {str(e)}", exc_info=True)

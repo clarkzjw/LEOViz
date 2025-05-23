@@ -93,7 +93,7 @@ class DataProcessor:
             # Read CSV with headers and skip the header row
             df_obstruction = pd.read_csv(obstruction_filepath, names=['timestamp', 'Y', 'X'], skiprows=1)
             
-            # Convert timestamp to datetime with UTC timezone
+            # Convert timestamp to datetime with UTC timezone (already in datetime string format)
             df_obstruction['timestamp'] = pd.to_datetime(df_obstruction['timestamp'], utc=True)
 
             # Add dish status data with UTC timezone
@@ -114,26 +114,18 @@ class DataProcessor:
                 _rotation_az = df_status['boresightAzimuthDeg'].iloc[status_idx]
                 _rotation_el = df_status['boresightElevationDeg'].iloc[status_idx]
 
-                # Add location data for mobile installations
-                if config.MOBILE and df_location is not None:
-                    location_diffs = abs(df_location['timestamp'] - point['timestamp'])
-                    location_idx = location_diffs.idxmin()
-                    _lat = df_location['lat'].iloc[location_idx]
-                    _lon = df_location['lon'].iloc[location_idx]
-                    _alt = df_location['alt'].iloc[location_idx]
-                else:
-                    # Use static location from config
-                    _lat = config.LATITUDE
-                    _lon = config.LONGITUDE
-                    _alt = config.ALTITUDE
-
                 # Add data to row
                 df_obstruction.at[idx, 'Tilt'] = _tilt
                 df_obstruction.at[idx, 'RotationAz'] = _rotation_az
                 df_obstruction.at[idx, 'RotationEl'] = _rotation_el
-                df_obstruction.at[idx, 'Latitude'] = _lat
-                df_obstruction.at[idx, 'Longitude'] = _lon
-                df_obstruction.at[idx, 'Altitude'] = _alt
+
+                # Only add location data if in mobile mode
+                if config.MOBILE and df_location is not None:
+                    location_diffs = abs(df_location['timestamp'] - point['timestamp'])
+                    location_idx = location_diffs.idxmin()
+                    df_obstruction.at[idx, 'Latitude'] = df_location['lat'].iloc[location_idx]
+                    df_obstruction.at[idx, 'Longitude'] = df_location['lon'].iloc[location_idx]
+                    df_obstruction.at[idx, 'Altitude'] = df_location['alt'].iloc[location_idx]
 
             return df_obstruction
 
@@ -142,49 +134,48 @@ class DataProcessor:
             return pd.DataFrame()
 
     @staticmethod
-    def process_observed_data(filename: str, start_time: str, 
+    def process_observed_data(obstruction_filename: str, start_time: str, 
                             merged_data_file: str) -> Optional[List[Tuple[datetime, Tuple[float, float]]]]:
         """Process observed data for a specific time interval."""
-        data = pd.read_csv(filename, sep=",", header=None, names=["Timestamp", "Y", "X"])
-        data["Timestamp"] = pd.to_datetime(data["Timestamp"], utc=True)
+        # Read the original obstruction data - skip the header row
+        obstruction_data = pd.read_csv(obstruction_filename, sep=",", header=None, names=["Timestamp", "Y", "X"], skiprows=1)
+        obstruction_data["Timestamp"] = pd.to_datetime(obstruction_data["Timestamp"], utc=True)
         
         interval_start_time = pd.to_datetime(start_time, utc=True)
         interval_end_time = interval_start_time + pd.Timedelta(seconds=14)
         
-        filtered_data = data[
-            (data["Timestamp"] >= interval_start_time) &
-            (data["Timestamp"] < interval_end_time)
+        filtered_data = obstruction_data[
+            (obstruction_data["Timestamp"] >= interval_start_time) &
+            (obstruction_data["Timestamp"] < interval_end_time)
         ]
         
         if filtered_data.empty:
             logger.warning("No data found in the specified interval.")
             return None
 
-        merged_data = pd.read_csv(merged_data_file, parse_dates=["Timestamp"])
-        merged_data["Timestamp"] = pd.to_datetime(merged_data["Timestamp"], utc=True)
+        # Read the merged data
+        #timestamp, Tilt, RotationAz, RotationEl, Latitude?, Longitude?, Altitude?
+        merged_data = pd.read_csv(merged_data_file)
+        merged_data["timestamp"] = pd.to_datetime(merged_data["timestamp"], utc=True)
         
         merged_filtered_data = merged_data[
-            (merged_data["Timestamp"] >= interval_start_time) &
-            (merged_data["Timestamp"] < interval_end_time)
+            (merged_data["timestamp"] >= interval_start_time) &
+            (merged_data["timestamp"] < interval_end_time)
         ]
 
         if len(merged_filtered_data) < 3:
             logger.warning("Not enough data points in merged_filtered_data.")
             return None
 
-        timestamps = [
-            merged_filtered_data.iloc[0]["Timestamp"],
-            merged_filtered_data.iloc[len(merged_filtered_data) // 2]["Timestamp"],
-            merged_filtered_data.iloc[-1]["Timestamp"]
-        ]
-        
-        # Add logging to show positions per timestamp
+        # Get exactly 3 positions: start, middle, and end
+        start_idx = 0
+        middle_idx = len(merged_filtered_data) // 2
+        end_idx = len(merged_filtered_data) - 1
+
         positions = []
-        for ts in timestamps:
-            matching_rows = merged_filtered_data[merged_filtered_data["Timestamp"] == ts]
-            logger.info(f"Timestamp {ts}: found {len(matching_rows)} positions")
-            for _, row in matching_rows.iterrows():
-                positions.append((ts, (90 - row["Elevation"], row["Azimuth"])))
-        
-        logger.info(f"Total positions found: {len(positions)}")
+        for idx in [start_idx, middle_idx, end_idx]:
+            row = merged_filtered_data.iloc[idx]
+            positions.append((row["timestamp"], (90 - row["Y"], row["X"])))
+            logger.info(f"Timestamp {row['timestamp']}: position ({90 - row['Y']}, {row['X']})")
+
         return positions 

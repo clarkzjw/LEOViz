@@ -5,11 +5,17 @@ import argparse
 import schedule
 from typing import Optional, Callable, Any
 from datetime import datetime, timedelta
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path("./starlink-grpc-tools").resolve()))
+import starlink_grpc
 
 import config
 from latency import icmp_ping
 from dish import (
-    monitor_dish_state,
+    grpc_status_job,
+    grpc_gps_diagnostics_job,
     get_obstruction_map
 )
 from util import run, load_tle, ensure_directory, get_timestamp_str, get_date_str
@@ -31,9 +37,8 @@ class Scheduler:
         schedule.every(1).hours.at(":00").do(run, icmp_ping).tag("Latency")
         
         # gRPC data collection
-        # schedule.every(1).hours.at(":00").do(run, grpc_get_status).tag("gRPC")
         schedule.every(1).hours.at(":00").do(run, get_obstruction_map).tag("gRPC")
-        schedule.every(1).hours.at(":00").do(run, monitor_dish_state).tag("gRPC")
+        schedule.every(1).hours.at(":00").do(run, grpc_status_job).tag("gRPC")
         
         # TLE data updates
         schedule.every(1).hours.at(":00").do(run, load_tle).tag("TLE")
@@ -41,7 +46,7 @@ class Scheduler:
     @staticmethod
     def setup_mobile_schedule() -> None:
         """Set up additional schedules for mobile installations."""
-        # schedule.every().hour.at(":00").do(run, grpc_get_location).tag("gRPC")
+        schedule.every().hour.at(":00").do(run, grpc_gps_diagnostics_job).tag("gRPC")
 
     @staticmethod
     def log_schedule_info() -> None:
@@ -130,6 +135,10 @@ def main() -> None:
     
     # Set up scheduled tasks
     Scheduler.setup_schedules()
+    
+    # Set up mobile-specific schedules if in mobile mode
+    if config.MOBILE:
+        Scheduler.setup_mobile_schedule()
     
     if args.run_once:
         schedule.run_all()

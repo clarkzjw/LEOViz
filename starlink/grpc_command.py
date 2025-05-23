@@ -1,9 +1,13 @@
 import json
 import logging
 import subprocess
-from typing import Optional, Dict, Any
-
+import time
+from typing import Optional, Dict, Any, List, Tuple
+import sys
 import config
+from pathlib import Path
+sys.path.insert(0, str(Path("./starlink-grpc-tools").resolve()))
+import starlink_grpc
 
 logger = logging.getLogger(__name__)
 
@@ -12,35 +16,100 @@ GRPC_TIMEOUT = 10
 class GrpcCommand:
     """Handles GRPC command execution and response parsing."""
     
-    def __init__(self, command_type: str, data: str):
-        self.command_type = command_type
-        self.data = data
-        self.cmd = [
+    def __init__(self):
+        self.status_cmd = [
             "grpcurl",
             "-plaintext",
             "-d",
-            data,
+            '{"get_status":{}}',
+            config.STARLINK_GRPC_ADDR_PORT,
+            "SpaceX.API.Device.Device/Handle",
+        ]
+        self.diagnostics_cmd = [
+            "grpcurl",
+            "-plaintext",
+            "-d",
+            '{"get_diagnostics":{}}',
+            config.STARLINK_GRPC_ADDR_PORT,
+            "SpaceX.API.Device.Device/Handle",
+        ]
+        self.reset_obstruction_cmd = [
+            "grpcurl",
+            "-plaintext",
+            "-d",
+            '{"dish_clear_obstruction_map":{}}',
             config.STARLINK_GRPC_ADDR_PORT,
             "SpaceX.API.Device.Device/Handle",
         ]
 
-    def execute(self) -> Optional[Dict[str, Any]]:
-        """Execute the GRPC command and return parsed response."""
+    def reset_obstruction_map(self) -> None:
+        """Reset the dish obstruction map using grpcurl."""
         try:
-            output = subprocess.check_output(self.cmd, timeout=GRPC_TIMEOUT)
-            return json.loads(output.decode("utf-8"))
+            result = self.execute(self.reset_obstruction_cmd)
+            if result is None:
+                raise Exception("Failed to reset obstruction map")
+            logger.info("Resetting dish obstruction map")
+        except Exception as e:
+            logger.error(f"Failed resetting obstruction map: {str(e)}")
+            raise
+
+    def execute(self, cmd: List[str]) -> Optional[Dict[str, Any]]:
+        """Execute a grpcurl command and return parsed JSON response."""
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=GRPC_TIMEOUT)
+            if result.returncode != 0:
+                logger.error(f"Command failed with error: {result.stderr}")
+                return None
+            
+            return json.loads(result.stdout)
         except subprocess.TimeoutExpired:
-            logger.warning(f"Timeout executing {self.command_type} command")
+            logger.error(f"Command timed out after {GRPC_TIMEOUT} seconds")
+            return None
+        except json.JSONDecodeError:
+            logger.error("Failed to parse command output as JSON")
             return None
         except Exception as e:
-            logger.error(f"Error executing {self.command_type} command: {str(e)}")
+            logger.error(f"Error executing command: {str(e)}")
             return None
 
-    def save_to_file(self, filename: str) -> None:
-        """Save command output to a file."""
+    def status(self, current_time: float) -> Optional[List[Any]]:
+        """Execute status command and return parsed response."""
         try:
-            with open(filename, "w") as outfile:
-                subprocess.run(self.cmd, stdout=outfile, timeout=GRPC_TIMEOUT)
-            logger.info(f"Saved {self.command_type} to {filename}")
-        except subprocess.TimeoutExpired:
-            pass 
+            # Import DataProcessor here to avoid circular import
+            from data_processor import DataProcessor
+            
+            status_data = self.execute(self.status_cmd)
+            if not status_data:
+                return None
+
+            dish_status = status_data.get("dishGetStatus")
+            if not dish_status or "alignmentStats" not in dish_status:
+                logger.warning("Missing dishGetStatus or alignmentStats in status data")
+                return None
+
+            return DataProcessor.extract_status_fields(dish_status, current_time)
+
+        except Exception as e:
+            logger.error(f"Error getting status data: {str(e)}")
+            return None
+
+    def gps_diagnostics(self, current_time: float) -> Optional[List[Any]]:
+        """Execute diagnostics command and return parsed response."""
+        if not config.MOBILE:
+            logger.info("Skipping GPS diagnostics - not in mobile mode")
+            return None
+
+        try:
+            # Import DataProcessor here to avoid circular import
+            from data_processor import DataProcessor
+            
+            diagnostics_data = self.execute(self.diagnostics_cmd)
+            if not diagnostics_data:
+                logger.error("Failed to get diagnostics data")
+                return None
+
+            return DataProcessor.extract_location_fields(diagnostics_data, current_time)
+
+        except Exception as e:
+            logger.error(f"Error getting GPS diagnostics data: {str(e)}")
+            return None
