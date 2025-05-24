@@ -6,11 +6,7 @@ import schedule
 
 import config
 from latency import icmp_ping
-from dish import (
-    grpc_status_job,
-    grpc_gps_diagnostics_job,
-    get_obstruction_map
-)
+from jobs import JobManager
 from util import run, load_tle
 from config import print_config
 
@@ -20,57 +16,43 @@ class Application:
     """Main application class that manages configuration and scheduling."""
     def __init__(self):
         self.config = self._parse_arguments()
-        self._configure_mobile_mode()
-        self._configure_static_location()
-        self.scheduler = Scheduler(self.config)
+        self._configure_application()
+        self.job_manager = JobManager()
+        self.scheduler = Scheduler(self.config, self.job_manager)
         
     def _parse_arguments(self) -> argparse.Namespace:
         """Parse command line arguments."""
         parser = argparse.ArgumentParser(description="LEOViz | Starlink metrics collection")
         
-        parser.add_argument(
-            "--run-once",
-            action="store_true",
-            help="Run once and exit"
-        )
-        parser.add_argument(
-            "--lat",
-            type=float,
-            required=False,
-            help="Dish latitude"
-        )
-        parser.add_argument(
-            "--lon",
-            type=float,required=False,
-            help="Dish longitude"
-        )
-        parser.add_argument("--alt",type=float,required=False,help="Dish altitude")
-        parser.add_argument("--mobile",type=bool,required=False,help="Dish is in mobile mode")
-        parser.add_argument("--duration",type=int,required=False,help="Duration of the application in seconds",default=3600)
+        # Operation mode arguments
+        parser.add_argument("--run-once", action="store_true", help="Run once and exit")
+        parser.add_argument("--mobile", action="store_true", help="Dish is in mobile mode")
+        parser.add_argument("--duration", type=int, default=5, help="Duration of the application in minutes")
+        
+        # Location arguments (required for static installations)
+        location_group = parser.add_argument_group("Location Settings")
+        location_group.add_argument("--lat", type=float, help="Dish latitude")
+        location_group.add_argument("--lon", type=float, help="Dish longitude")
+        location_group.add_argument("--alt", type=float, help="Dish altitude")
         
         return parser.parse_args()
 
-    def _configure_mobile_mode(self) -> None:
-        """Configure settings for mobile installations."""
-        config.MOBILE = bool(self.config.mobile)
+    def _configure_application(self) -> None:
+        """Configure application settings based on arguments."""
+        # Configure mobile mode
+        config.MOBILE = self.config.mobile
+        
+        # Configure location for static installations
         if not config.MOBILE:
-            self._configure_static_location()
-
-    def _configure_static_location(self) -> None:
-        """Configure settings for static installations."""
-        if all([self.config.lat, self.config.lon, self.config.alt]):
-            config.LATITUDE = self.config.lat
-            config.LONGITUDE = self.config.lon
-            config.ALTITUDE = self.config.alt
-        else:
-            logger.warning(
-                "Latitude, Longitude and Altitude not provided. "
-                "Won't estimate connected satellites."
-            )
+            if all([self.config.lat, self.config.lon, self.config.alt]):
+                config.LATITUDE = self.config.lat
+                config.LONGITUDE = self.config.lon
+                config.ALTITUDE = self.config.alt
+            else:
+                logger.warning("Latitude, Longitude and Altitude not provided. Won't estimate connected satellites.")
 
     def run(self) -> None:
         """Run the application."""
-        # Print current configuration
         print_config()
         
         if self.config.run_once:
@@ -81,24 +63,22 @@ class Application:
 
 class Scheduler:
     """Manages scheduling of various data collection tasks."""
-    def __init__(self, config):
+    def __init__(self, config, job_manager):
         self.config = config
+        self.job_manager = job_manager
         self._setup_schedules()
 
     def _setup_schedules(self) -> None:
         """Set up all scheduled tasks."""
-        # Latency measurements
+        # Schedule all tasks to run at the start of each hour
         schedule.every(1).hours.at(":00").do(run, icmp_ping).tag("Latency")
-        
-        # gRPC data collection
-        schedule.every(1).hours.at(":00").do(run, get_obstruction_map).tag("gRPC")
-        schedule.every(1).hours.at(":00").do(run, grpc_status_job).tag("gRPC")
-        
-        # TLE data updates
+        schedule.every(1).hours.at(":00").do(run, self.job_manager.get_obstruction_map_job).tag("gRPC")
+        schedule.every(1).hours.at(":00").do(run, self.job_manager.grpc_status_job).tag("gRPC")
         schedule.every(1).hours.at(":00").do(run, load_tle).tag("TLE")
 
+        # Add mobile-specific tasks
         if self.config.mobile:
-            schedule.every().hour.at(":00").do(run, grpc_gps_diagnostics_job).tag("gRPC")
+            schedule.every().hour.at(":00").do(run, self.job_manager.grpc_gps_diagnostics_job).tag("gRPC")
 
     def log_schedule_info(self) -> None:
         """Log information about scheduled tasks."""

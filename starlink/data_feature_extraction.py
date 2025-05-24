@@ -6,15 +6,28 @@ import time
 from datetime import datetime
 from pathlib import Path
 from typing import List, Tuple, Optional, Dict, Any
+import csv
 
 import config
 from location_provider import LocationProvider
+from obstruction import ObstructionMap
 
 logger = logging.getLogger(__name__)
 
 class DataFeatureExtraction:
-    """Processes and converts data for analysis."""
+    """Extracts and processes features from Starlink dish data.
+    
+    This class handles the extraction and processing of various data features
+    from Starlink dish data, including obstruction maps, status data, and
+    location data. It provides methods for merging different data sources and
+    processing observed positions.
+    
+    Attributes:
+        obstruction_map (ObstructionMap): Instance for processing obstruction map data
+    """
+
     def __init__(self):
+        """Initialize the DataFeatureExtraction with required components."""
         self.status_columns = [
             "timestamp", "sinr", "popPingLatencyMs", "downlinkThroughputBps",
             "uplinkThroughputBps", "tiltAngleDeg", "boresightAzimuthDeg",
@@ -27,6 +40,7 @@ class DataFeatureExtraction:
             "gps_time", "timestamp", "lat", "lon", "alt",
             "uncertainty_valid", "uncertainty"
         ]
+        self.obstruction_map = ObstructionMap()
     
     def get_status_columns(self) -> List[str]:
         """Get the list of status columns."""
@@ -40,7 +54,7 @@ class DataFeatureExtraction:
         """Write CSV header for status data."""
         csv_writer.writerow(self.status_columns)
 
-    def write_location_csv_header(self  , csv_writer) -> None:
+    def write_location_csv_header(self, csv_writer) -> None:
         """Write CSV header for location data."""
         csv_writer.writerow(self.location_columns)
 
@@ -81,95 +95,170 @@ class DataFeatureExtraction:
             location.get("uncertaintyMeters", 0)
         ]
 
-    def merge_obstruction_with_status_and_location(self, obstruction_filepath: str, frame_type: int, df_status: pd.DataFrame,
-                                df_location: Optional[pd.DataFrame] = None) -> pd.DataFrame:
-        """Pre-process observed data with dish status and location information."""
+    def merge_obstruction_with_status_and_location(
+        self,
+        filename: str,
+        frame_type: int,
+        df_status: pd.DataFrame,
+        df_location: Optional[pd.DataFrame] = None,
+    ) -> pd.DataFrame:
+        """Merge obstruction data with status and location data.
+        
+        Args:
+            filename: Path to the obstruction data file
+            frame_type: Reference frame type (1=FRAME_EARTH, 2=FRAME_UT)
+            df_status: DataFrame containing dish status data
+            df_location: Optional DataFrame containing location data for mobile installations
+            
+        Returns:
+            pd.DataFrame: Merged DataFrame containing:
+                - Timestamp
+                - Obstruction map data
+                - Status data
+                - Location data (for mobile installations)
+                
+        Note:
+            - For mobile installations, location data is required
+            - Status data must contain timestamp column
+            - Returns empty DataFrame if merge fails
+        """
         try:
-            # Read CSV with headers and skip the header row
-            df_obstruction = pd.read_csv(obstruction_filepath, names=['timestamp', 'Y', 'X'], skiprows=1)
-            
-            # Convert timestamp to datetime with UTC timezone (already in datetime string format)
-            df_obstruction['timestamp'] = pd.to_datetime(df_obstruction['timestamp'], utc=True)
+            # Read obstruction data
+            df_obstruction = pd.read_csv(filename)
+            df_obstruction["timestamp"] = pd.to_datetime(
+                df_obstruction["timestamp"], unit="s"
+            )
 
-            # Add dish status data with UTC timezone
-            df_status['timestamp'] = pd.to_datetime(df_status['timestamp'], unit='s', utc=True)
+            # Convert status timestamps
+            df_status["timestamp"] = pd.to_datetime(df_status["timestamp"], unit="s")
 
-            # Add location data for mobile installations with UTC timezone
+            # Merge obstruction and status data
+            merged_df = pd.merge(
+                df_obstruction,
+                df_status,
+                on="timestamp",
+                how="inner",
+            )
+
+            # Add location data for mobile installations
             if config.MOBILE and df_location is not None:
-                df_location['timestamp'] = pd.to_datetime(df_location['timestamp'], unit='s', utc=True)
-            
-            logger.info("Loaded the obstruction data, status data and the location data")
+                df_location["timestamp"] = pd.to_datetime(
+                    df_location["timestamp"], unit="s"
+                )
+                merged_df = pd.merge(
+                    merged_df,
+                    df_location,
+                    on="timestamp",
+                    how="inner",
+                )
 
-            # Match timestamps and add dish data
-            for idx, point in df_obstruction.iterrows():
-                # Get closest status data - but never go forward in time
-                status_diffs = abs(df_status['timestamp'] - point['timestamp'])
-                status_idx = status_diffs.idxmin() if status_diffs.idxmin() < idx else idx
-                _tilt = df_status['tiltAngleDeg'].iloc[status_idx]
-                _rotation_az = df_status['boresightAzimuthDeg'].iloc[status_idx]
-                _rotation_el = df_status['boresightElevationDeg'].iloc[status_idx]
-
-                # Add data to row
-                df_obstruction.at[idx, 'Tilt'] = _tilt
-                df_obstruction.at[idx, 'RotationAz'] = _rotation_az
-                df_obstruction.at[idx, 'RotationEl'] = _rotation_el
-
-                # Only add location data if in mobile mode
-                if config.MOBILE and df_location is not None:
-                    location_diffs = abs(df_location['timestamp'] - point['timestamp'])
-                    location_idx = location_diffs.idxmin()
-                    df_obstruction.at[idx, 'Latitude'] = df_location['lat'].iloc[location_idx]
-                    df_obstruction.at[idx, 'Longitude'] = df_location['lon'].iloc[location_idx]
-                    df_obstruction.at[idx, 'Altitude'] = df_location['alt'].iloc[location_idx]
-
-            return df_obstruction
+            return merged_df
 
         except Exception as e:
-            logger.error(f"Error merging obstruction data with status and location data: {str(e)}", exc_info=True)
+            logger.error(f"Error merging data: {str(e)}", exc_info=True)
             return pd.DataFrame()
 
-    def process_observed_data(self, obstruction_filename: str, start_time: str, 
-                            merged_data_file: str) -> Optional[List[Tuple[datetime, Tuple[float, float]]]]:
-        """Process observed data for a specific time interval."""
-        # Read the original obstruction data - skip the header row
-        obstruction_data = pd.read_csv(obstruction_filename, sep=",", header=None, names=["Timestamp", "Y", "X"], skiprows=1)
-        obstruction_data["Timestamp"] = pd.to_datetime(obstruction_data["Timestamp"], utc=True)
+    def process_observed_data(
+        self,
+        filename: str,
+        timestamp: str,
+        merged_data_file: str,
+    ) -> Optional[List[Tuple[datetime, Tuple[float, float]]]]:
+        """Process observed positions from obstruction data.
         
-        interval_start_time = pd.to_datetime(start_time, utc=True)
-        interval_end_time = interval_start_time + pd.Timedelta(seconds=14)
-        
-        filtered_data = obstruction_data[
-            (obstruction_data["Timestamp"] >= interval_start_time) &
-            (obstruction_data["Timestamp"] < interval_end_time)
-        ]
-        
-        if filtered_data.empty:
-            logger.warning("No data found in the specified interval.")
+        Args:
+            filename: Path to the obstruction data file
+            timestamp: ISO format timestamp string
+            merged_data_file: Path to the merged data file
+            
+        Returns:
+            Optional[List[Tuple[datetime, Tuple[float, float]]]]: List of tuples containing:
+                - datetime: Timestamp of the observation
+                - Tuple[float, float]: (altitude, azimuth) in degrees
+                
+        Note:
+            - Processes data in 15-second intervals
+            - Returns None if processing fails
+            - Requires valid obstruction map data
+        """
+        try:
+            # Read obstruction data
+            df_obstruction = pd.read_csv(filename)
+            df_obstruction["timestamp"] = pd.to_datetime(
+                df_obstruction["timestamp"], unit="s"
+            )
+
+            # Get data for the specified timestamp
+            timestamp_dt = pd.to_datetime(timestamp)
+            timeslot_df = df_obstruction[
+                (df_obstruction["timestamp"] >= timestamp_dt)
+                & (df_obstruction["timestamp"] < timestamp_dt + pd.Timedelta(seconds=15))
+            ]
+
+            if timeslot_df.empty:
+                logger.error(f"No data found for timestamp {timestamp}")
+                return None
+
+            # Process the timeslot
+            observed_positions = []
+            for _, row in timeslot_df.iterrows():
+                timestamp_dt = pd.to_datetime(row["timestamp"])
+                elevation = row["elevation"]
+                azimuth = row["azimuth"]
+                observed_positions.append((timestamp_dt, (elevation, azimuth)))
+
+            return observed_positions
+
+        except Exception as e:
+            logger.error(f"Error processing observed data: {str(e)}", exc_info=True)
             return None
 
-        # Read the merged data
-        #timestamp, Tilt, RotationAz, RotationEl, Latitude?, Longitude?, Altitude?
-        merged_data = pd.read_csv(merged_data_file)
-        merged_data["timestamp"] = pd.to_datetime(merged_data["timestamp"], utc=True)
-        
-        merged_filtered_data = merged_data[
-            (merged_data["timestamp"] >= interval_start_time) &
-            (merged_data["timestamp"] < interval_end_time)
-        ]
+    def process_obstruction_estimate_satellites_per_timeslot(self, timeslot_df: pd.DataFrame, writer: csv.writer,
+                                                           csvfile: Any, filename: str, dt_string: str,
+                                                           date: str, frame_type_int: int) -> None:
+        """Process obstruction data and estimate satellites for a timeslot."""
+        try:
+            # Import here to avoid circular dependency
+            from satellite_matching_estimation import SatelliteProcessor
 
-        if len(merged_filtered_data) < 3:
-            logger.warning("Not enough data points in merged_filtered_data.")
-            return None
+            # Process obstruction data for the timeslot
+            self.obstruction_map.process_timeslot(timeslot_df, writer)
+            csvfile.flush()
+            self.obstruction_map.write_parquet(filename, timeslot_df)
 
-        # Get exactly 3 positions: start, middle, and end
-        start_idx = 0
-        middle_idx = len(merged_filtered_data) // 2
-        end_idx = len(merged_filtered_data) - 1
+            # Get status and location data files
+            status_filename = f"{config.DATA_DIR}/grpc/{date}/GRPC_STATUS-{dt_string}.csv"
+            gps_diagnostics_filename = f"{config.DATA_DIR}/grpc/{date}/GRPC_LOCATION-{dt_string}.csv"
 
-        positions = []
-        for idx in [start_idx, middle_idx, end_idx]:
-            row = merged_filtered_data.iloc[idx]
-            positions.append((row["timestamp"], (90 - row["Y"], row["X"])))
-            logger.info(f"Timestamp {row['timestamp']}: position ({90 - row['Y']}, {row['X']})")
+            if not os.path.exists(status_filename):
+                logger.error(f"Status file not found: {status_filename}")
+                return
 
-        return positions 
+            # Read status data
+            df_status = pd.read_csv(status_filename)
+
+            # Handle location data based on installation type
+            gps_diagnostics_df = None
+            if config.MOBILE:
+                if not os.path.exists(gps_diagnostics_filename):
+                    logger.error(f"Location file not found: {gps_diagnostics_filename}")
+                    return
+                    
+                gps_diagnostics_df = pd.read_csv(gps_diagnostics_filename)
+                if not all(col in gps_diagnostics_df.columns for col in ['timestamp', 'lat', 'lon', 'alt']):
+                    logger.error("Missing required columns in location file for mobile installation")
+                    return
+
+            # Estimate connected satellites
+            satellite_processor = SatelliteProcessor()
+            merged_df = satellite_processor.estimate_connected_satellites(
+                dt_string, date, frame_type_int, df_status,
+                timeslot_df.iloc[0]["timestamp"],
+                timeslot_df.iloc[-1]["timestamp"],
+            )
+
+            if merged_df is None or merged_df.empty:
+                logger.warning("No satellite data to save")
+
+        except Exception as e:
+            logger.error(f"Error in processing thread: {str(e)}", exc_info=True) 
