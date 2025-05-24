@@ -4,11 +4,15 @@ from datetime import datetime
 from typing import List, Tuple, Optional
 import pandas as pd
 import numpy as np
-
+import os
+import cv2
 from config import DATA_DIR
 from timeslot_manager import TimeslotManager
 
-import cv2
+# Add starlink-grpc-tools to Python path
+# sys.path.insert(0, str(Path("./starlink-grpc-tools").resolve()))
+# import starlink_grpc
+
 
 logger = logging.getLogger(__name__)
 
@@ -202,3 +206,17 @@ def create_obstruction_map_video(FILENAME, uuid, fps):
         out.write(image_data_bgr)
 
     out.release()
+
+
+def write_obstruction_map_parquet(filename: str, timeslot_df: pd.DataFrame) -> None:
+    """Write obstruction map data to parquet file."""
+    # Check if file exists and append or create new
+    if os.path.exists(filename):
+        # Read existing data and combine with new data
+        existing_df = pd.read_parquet(filename)
+        combined_df = pd.concat([existing_df, timeslot_df], ignore_index=True)
+        combined_df.to_parquet(filename, engine="pyarrow", compression="zstd")
+    else:
+        # Create new file with current data
+        timeslot_df.to_parquet(filename, engine="pyarrow", compression="zstd")
+    logger.info(f"Saved dish obstruction map to {filename}")

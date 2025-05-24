@@ -9,17 +9,13 @@ from typing import List, Tuple, Optional, Dict, Any
 
 import config
 from location_provider import LocationProvider
-from grpc_command import GrpcCommand
 
 logger = logging.getLogger(__name__)
 
-class DataProcessor:
+class DataFeatureExtraction:
     """Processes and converts data for analysis."""
-
-    @staticmethod
-    def get_status_columns() -> List[str]:
-        """Get columns for dish status data."""
-        return [
+    def __init__(self):
+        self.status_columns = [
             "timestamp", "sinr", "popPingLatencyMs", "downlinkThroughputBps",
             "uplinkThroughputBps", "tiltAngleDeg", "boresightAzimuthDeg",
             "boresightElevationDeg", "attitudeEstimationState",
@@ -27,27 +23,28 @@ class DataProcessor:
             "desiredBoresightElevationDeg", "quaternion_qScalar", "quaternion_qX",
             "quaternion_qY", "quaternion_qZ"
         ]
-
-    @staticmethod
-    def get_location_columns() -> List[str]:
-        """Get columns for location data."""
-        return [
+        self.location_columns = [
             "gps_time", "timestamp", "lat", "lon", "alt",
             "uncertainty_valid", "uncertainty"
         ]
+    
+    def get_status_columns(self) -> List[str]:
+        """Get the list of status columns."""
+        return self.status_columns
 
-    @staticmethod
-    def write_status_csv_header(csv_writer) -> None:
+    def get_location_columns(self) -> List[str]:
+        """Get the list of location columns."""
+        return self.location_columns
+
+    def write_status_csv_header(self, csv_writer) -> None:
         """Write CSV header for status data."""
-        csv_writer.writerow(DataProcessor.get_status_columns())
+        csv_writer.writerow(self.status_columns)
 
-    @staticmethod
-    def write_location_csv_header(csv_writer) -> None:
+    def write_location_csv_header(self  , csv_writer) -> None:
         """Write CSV header for location data."""
-        csv_writer.writerow(DataProcessor.get_location_columns())
+        csv_writer.writerow(self.location_columns)
 
-    @staticmethod
-    def extract_status_fields(status: Dict[str, Any], current_time: Optional[float] = None) -> List[Any]:
+    def extract_status_fields(self, status: Dict[str, Any], current_time: Optional[float] = None) -> List[Any]:
         """Extract fields for dish status data."""
         alignment = status.get("alignmentStats", {})
         quaternion = status.get("ned2dishQuaternion", {})
@@ -70,8 +67,7 @@ class DataProcessor:
             quaternion.get("qZ", 0)
         ]
 
-    @staticmethod
-    def extract_location_fields(diagnostics: Dict[str, Any], current_time: Optional[float] = None) -> List[Any]:
+    def extract_location_fields(self, diagnostics: Dict[str, Any], current_time: Optional[float] = None) -> List[Any]:
         """Extract fields for location data from diagnostics."""
         location = diagnostics.get("dishGetDiagnostics", {}).get("location", {})
         gps_time = location.get("gpsTimeS", 0)
@@ -85,8 +81,7 @@ class DataProcessor:
             location.get("uncertaintyMeters", 0)
         ]
 
-    @staticmethod
-    def merge_obstruction_with_status_and_location(obstruction_filepath: str, frame_type: int, df_status: pd.DataFrame,
+    def merge_obstruction_with_status_and_location(self, obstruction_filepath: str, frame_type: int, df_status: pd.DataFrame,
                                 df_location: Optional[pd.DataFrame] = None) -> pd.DataFrame:
         """Pre-process observed data with dish status and location information."""
         try:
@@ -130,11 +125,10 @@ class DataProcessor:
             return df_obstruction
 
         except Exception as e:
-            logger.error(f"Error pre-processing observed data: {str(e)}", exc_info=True)
+            logger.error(f"Error merging obstruction data with status and location data: {str(e)}", exc_info=True)
             return pd.DataFrame()
 
-    @staticmethod
-    def process_observed_data(obstruction_filename: str, start_time: str, 
+    def process_observed_data(self, obstruction_filename: str, start_time: str, 
                             merged_data_file: str) -> Optional[List[Tuple[datetime, Tuple[float, float]]]]:
         """Process observed data for a specific time interval."""
         # Read the original obstruction data - skip the header row

@@ -3,10 +3,8 @@
 import os
 import csv
 import sys
-import json
 import time
 import logging
-import subprocess
 import threading
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
@@ -14,17 +12,19 @@ from typing import Optional, List, Dict, Any, Tuple
 
 import numpy as np
 import pandas as pd
-from skyfield.api import load
 
 import config
 from config import DATA_DIR, STARLINK_GRPC_ADDR_PORT, DURATION_SECONDS, TLE_DATA_DIR
-from util import date_time_string, ensure_data_directory, ensure_directory, get_timestamp_str, get_date_str
-from obstruction import create_obstruction_map_video, process_obstruction_timeslot
-from data_processor import DataProcessor
+from util import date_time_string, ensure_data_directory
+from obstruction import (
+    create_obstruction_map_video,
+    process_obstruction_timeslot,
+    write_obstruction_map_parquet,
+)
+from data_feature_extraction import DataFeatureExtraction
 from satellite_matching_estimation import SatelliteProcessor
 from grpc_command import GrpcCommand
 from timeslot_manager import TimeslotManager
-from location_provider import LocationProvider
 
 # Add starlink-grpc-tools to Python path
 sys.path.insert(0, str(Path("./starlink-grpc-tools").resolve()))
@@ -49,7 +49,8 @@ def grpc_status_job() -> None:
     # Open CSV file for writing
     with open(status_filename, "w", newline="") as status_file:
         status_writer = csv.writer(status_file)
-        DataProcessor.write_status_csv_header(status_writer)
+        data_extracter = DataFeatureExtraction()
+        data_extracter.write_status_csv_header(status_writer)
 
         grpc = GrpcCommand()
         
@@ -90,7 +91,8 @@ def grpc_gps_diagnostics_job() -> None:
     # Open CSV file for writing
     with open(gps_diagnostics, "w", newline="") as gps_diagnostics_file:
         gps_diagnostics_writer = csv.writer(gps_diagnostics_file)
-        DataProcessor.write_location_csv_header(gps_diagnostics_writer)
+        data_extracter = DataFeatureExtraction()
+        data_extracter.write_location_csv_header(gps_diagnostics_writer)
 
         grpc = GrpcCommand()
         
@@ -132,7 +134,8 @@ def get_obstruction_map() -> None:
     obstruction_data_filename = f"{DATA_DIR}/obstruction-data-{dt_string}.csv"
 
     # Get frame type for obstruction map
-    frame_type_int, _ = get_obstruction_map_frame_type()
+    grpc = GrpcCommand()
+    frame_type_int, _ = grpc.get_obstruction_map_frame_type()
     start = time.time()
     thread_pool = []
 
@@ -140,7 +143,6 @@ def get_obstruction_map() -> None:
     with open(obstruction_data_filename, "w", newline="") as csvfile:
         writer = csv.writer(csvfile)
         writer.writerow(['timestamp', 'Y', 'X'])
-        grpc = GrpcCommand()
         context = starlink_grpc.ChannelContext(target=config.STARLINK_GRPC_ADDR_PORT)
         last_timeslot_second = None
 
@@ -267,36 +269,6 @@ def process_obstruction_estimate_satellites_per_timeslot(timeslot_df: pd.DataFra
 
     except Exception as e:
         logger.error(f"Error in processing thread: {str(e)}", exc_info=True)
-
-def write_obstruction_map_parquet(filename: str, timeslot_df: pd.DataFrame) -> None:
-    """Write obstruction map data to parquet file."""
-    # Check if file exists and append or create new
-    if os.path.exists(filename):
-        # Read existing data and combine with new data
-        existing_df = pd.read_parquet(filename)
-        combined_df = pd.concat([existing_df, timeslot_df], ignore_index=True)
-        combined_df.to_parquet(filename, engine="pyarrow", compression="zstd")
-    else:
-        # Create new file with current data
-        timeslot_df.to_parquet(filename, engine="pyarrow", compression="zstd")
-    logger.info(f"Saved dish obstruction map to {filename}")
-
-def get_obstruction_map_frame_type() -> Tuple[int, str]:
-    """Get the obstruction map frame type."""
-    # Create GRPC context
-    context = starlink_grpc.ChannelContext(target=STARLINK_GRPC_ADDR_PORT)
-    
-    # Get obstruction map data
-    map = starlink_grpc.get_obstruction_map(context)
-    
-    # Map frame type integer to string
-    frame_type = {
-        0: "UNKNOWN",
-        1: "FRAME_EARTH",
-        2: "FRAME_UT"
-    }.get(map.map_reference_frame, "UNKNOWN")
-    
-    return map.map_reference_frame, frame_type
 
 def wait_until_target_time(last_timeslot_second: int) -> int:
     """Wait until the next timeslot and return the next timeslot second."""

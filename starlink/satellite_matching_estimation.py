@@ -8,8 +8,8 @@ import numpy as np
 from skyfield.api import load, utc
 
 import config
-from data_processor import DataProcessor
 from location_provider import LocationProvider
+from data_feature_extraction import DataFeatureExtraction
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +49,8 @@ class SatelliteProcessor:
             
             # Merge obstruction data with status and location data
             logger.info(f"Merging obstruction data with status and location data")
-            merged_df = DataProcessor.merge_obstruction_with_status_and_location(
+            data_extracter = DataFeatureExtraction()
+            merged_df = data_extracter.merge_obstruction_with_status_and_location(
                 filename,
                 frame_type,
                 df_status,
@@ -198,7 +199,8 @@ class SatelliteProcessor:
             return None, None, None
 
         # Get observed positions using the existing method
-        observed_positions_with_timestamps = DataProcessor.process_observed_data(
+        data_extracter = DataFeatureExtraction()
+        observed_positions_with_timestamps = data_extracter.process_observed_data(
             filename, initial_time.strftime("%Y-%m-%dT%H:%M:%SZ"), merged_data_file
         )
         if observed_positions_with_timestamps is None:

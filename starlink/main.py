@@ -41,22 +41,12 @@ class Application:
         )
         parser.add_argument(
             "--lon",
-            type=float,
-            required=False,
+            type=float,required=False,
             help="Dish longitude"
         )
-        parser.add_argument(
-            "--alt",
-            type=float,
-            required=False,
-            help="Dish altitude"
-        )
-        parser.add_argument(
-            "--mobile",
-            type=bool,
-            required=False,
-            help="Dish is in mobile mode"
-        )
+        parser.add_argument("--alt",type=float,required=False,help="Dish altitude")
+        parser.add_argument("--mobile",type=bool,required=False,help="Dish is in mobile mode")
+        parser.add_argument("--duration",type=int,required=False,help="Duration of the application in seconds",default=3600)
         
         return parser.parse_args()
 

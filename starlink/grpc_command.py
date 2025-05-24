@@ -8,6 +8,7 @@ import config
 from pathlib import Path
 sys.path.insert(0, str(Path("./starlink-grpc-tools").resolve()))
 import starlink_grpc
+from data_feature_extraction import DataFeatureExtraction
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +42,7 @@ class GrpcCommand:
             config.STARLINK_GRPC_ADDR_PORT,
             "SpaceX.API.Device.Device/Handle",
         ]
+        self.data_extracter = DataFeatureExtraction()
 
     def reset_obstruction_map(self) -> None:
         """Reset the dish obstruction map using grpcurl."""
@@ -75,9 +77,6 @@ class GrpcCommand:
     def status(self, current_time: float) -> Optional[List[Any]]:
         """Execute status command and return parsed response."""
         try:
-            # Import DataProcessor here to avoid circular import
-            from data_processor import DataProcessor
-            
             status_data = self.execute(self.status_cmd)
             if not status_data:
                 return None
@@ -87,7 +86,7 @@ class GrpcCommand:
                 logger.warning("Missing dishGetStatus or alignmentStats in status data")
                 return None
 
-            return DataProcessor.extract_status_fields(dish_status, current_time)
+            return self.data_extracter.extract_status_fields(dish_status, current_time)
 
         except Exception as e:
             logger.error(f"Error getting status data: {str(e)}")
@@ -100,16 +99,34 @@ class GrpcCommand:
             return None
 
         try:
-            # Import DataProcessor here to avoid circular import
-            from data_processor import DataProcessor
-            
             diagnostics_data = self.execute(self.diagnostics_cmd)
             if not diagnostics_data:
                 logger.error("Failed to get diagnostics data")
                 return None
 
-            return DataProcessor.extract_location_fields(diagnostics_data, current_time)
+            return self.data_extracter.extract_location_fields(diagnostics_data, current_time)
 
         except Exception as e:
             logger.error(f"Error getting GPS diagnostics data: {str(e)}")
             return None
+
+    def get_obstruction_map_frame_type(self) -> Tuple[int, str]:
+        """Get the obstruction map frame type."""
+        try:
+            # Create GRPC context
+            context = starlink_grpc.ChannelContext(target=config.STARLINK_GRPC_ADDR_PORT)
+            
+            # Get obstruction map data
+            map = starlink_grpc.get_obstruction_map(context)
+            
+            # Map frame type integer to string
+            frame_type = {
+                0: "UNKNOWN",
+                1: "FRAME_EARTH",
+                2: "FRAME_UT"
+            }.get(map.map_reference_frame, "UNKNOWN")
+            
+            return map.map_reference_frame, frame_type
+        except Exception as e:
+            logger.error(f"Error getting obstruction map frame type: {str(e)}")
+            return 0, "UNKNOWN"
