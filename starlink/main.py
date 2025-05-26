@@ -68,7 +68,7 @@ class Application:
 class Scheduler:
     """Manages scheduling of various data collection tasks."""
 
-    def __init__(self, config, job_manager):
+    def __init__(self, config: argparse.Namespace, job_manager: JobManager):
         self.config = config
         self.job_manager = job_manager
         self._setup_schedules()
@@ -89,7 +89,7 @@ class Scheduler:
         """Log information about scheduled tasks."""
         logger.info("Scheduled tasks:")
         for job in schedule.get_jobs():
-            logger.info(f"- {job.tags[0]}: {job.next_run}")
+            logger.info(f"- {next(iter(job.tags))}: {job.next_run}")
 
     def run_scheduled_tasks(self) -> None:
         """Run all scheduled tasks."""
