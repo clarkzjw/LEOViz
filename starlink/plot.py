@@ -8,6 +8,7 @@ from pathlib import Path
 from datetime import datetime
 from multiprocessing import Pool
 
+import numpy as np
 import pandas as pd
 import cartopy
 import cartopy.crs as ccrs
@@ -142,9 +143,14 @@ def plot_once(
     gs01 = gs0[1].subgridspec(4, 1)
 
     axFullRTT = fig.add_subplot(gs01[0, :])
-    axFullSINR = fig.add_subplot(gs01[1, :], sharex=axFullRTT)
-    axRTT = fig.add_subplot(gs01[2, :])
-    axSINR = fig.add_subplot(gs01[3, :], sharex=axRTT)
+    axRTT = fig.add_subplot(gs01[1, :])
+    axFOV = fig.add_subplot(gs01[2:, :], projection="polar")
+
+    axFOV.set_ylim(0, 90)
+    axFOV.set_yticks(np.arange(0, 91, 10))
+    axFOV.set_theta_zero_location("N")
+    axFOV.set_theta_direction(-1)
+    axFOV.grid(True)
 
     axSat.scatter(
         centralLon,
@@ -204,21 +210,6 @@ def plot_once(
         )
         axFullRTT.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M:%S"))
 
-    if not df_sinr.empty:
-        axFullSINR.plot(
-            df_sinr["timestamp"],
-            df_sinr["sinr"],
-            color="blue",
-            label="SINR",
-            marker="x",
-            markersize=2,
-        )
-        axFullSINR.axvline(
-            x=plot_current,
-            color="red",
-            linestyle="--",
-        )
-
     all_satellites_in_canvas, connected_sat_lat, connected_sat_lon = get_connected_satellite_lat_lon(
         timestamp_str, connected_sat_name, all_satellites
     )
@@ -259,7 +250,6 @@ def plot_once(
         )
 
     axSat.set_title(f"Timestamp: {timestamp_str}, Connected satellite: {connected_sat_name}, {connected_sat_gen}")
-
     axSat.legend(loc="upper left")
 
     if not df_rtt.empty:
@@ -269,9 +259,6 @@ def plot_once(
             df_rtt.iloc[0]["timestamp"],
             df_rtt.iloc[-1]["timestamp"],
         )
-    if not df_sinr.empty:
-        axFullSINR.set_title("SINR")
-        axFullSINR.set_ylabel("SINR (dB)")
 
     zoom_start = plot_current - pd.Timedelta(minutes=1)
     zoom_end = plot_current + pd.Timedelta(minutes=1)
@@ -296,27 +283,6 @@ def plot_once(
         axRTT.set_title(f"RTT at {timestamp_str}")
         axRTT.set_ylabel("RTT (ms)")
         axRTT.set_xticklabels([])
-
-    if not df_sinr.empty:
-        df_sinr_zoomed = df_sinr[(df_sinr["timestamp"] >= zoom_start) & (df_sinr["timestamp"] <= zoom_end)]
-
-        axSINR.plot(
-            df_sinr_zoomed["timestamp"],
-            df_sinr_zoomed["sinr"],
-            color="blue",
-            label="SINR",
-            marker="x",
-            markersize=4,
-        )
-        axSINR.axvline(
-            x=plot_current,
-            color="red",
-            linestyle="--",
-        )
-
-        axSINR.set_title(f"SINR at {timestamp_str}")
-        axSINR.set_ylabel("SINR (dB)")
-        axSINR.set_xticklabels([])
 
     plt.tight_layout()
     plt.savefig(f"{FIGURE_DIR}/{timestamp_str}.png")
