@@ -1,9 +1,9 @@
 import os
+import logging
 import argparse
 import subprocess
 
 from copy import deepcopy
-from typing import List
 from pathlib import Path
 from datetime import datetime
 from multiprocessing import Pool
@@ -23,6 +23,7 @@ from pop import get_pop_data, get_home_pop
 
 cartopy.config["data_dir"] = os.getenv("CARTOPY_DIR", cartopy.config.get("data_dir"))
 
+logger = logging.getLogger(__name__)
 
 POP_DATA = None
 HOME_POP = None
@@ -82,7 +83,7 @@ def plot_once(
     df_sinr,
     all_satellites,
 ):
-    timestamp_str = row["Timestamp"]
+    timestamp_str = row["Timestamp"].strftime("%Y-%m-%d %H:%M:%S%z")
     connected_sat_name = row["Connected_Satellite"]
     plot_current = pd.to_datetime(timestamp_str, format="%Y-%m-%d %H:%M:%S%z")
 
@@ -346,12 +347,7 @@ def plot():
     global POP_DATA
     global HOME_POP
 
-    for file in [
-        OBSTRUCTION_MAP_DATA,
-        SINR_DATA,
-        LATENCY_DATA,
-        TLE_DATA,
-    ]:
+    for file in [OBSTRUCTION_MAP_DATA, SINR_DATA, LATENCY_DATA, TLE_DATA]:
         if not file.exists():
             print(f"File {file} does not exist.")
             continue
@@ -359,8 +355,22 @@ def plot():
     df_obstruction_map = pd.read_parquet(OBSTRUCTION_MAP_DATA)
     df_sinr = pd.read_csv(SINR_DATA)
     df_rtt = load_ping(LATENCY_DATA)
+    df_processed = pd.read_csv(PROCESSED_DATA)
     all_satellites = load_tle_from_file(TLE_DATA)
     connected_satellites = load_connected_satellites(f"{DATA_DIR}/serving_satellite_data-{DATE_TIME}.csv")
+
+    df_processed["timestamp"] = pd.to_datetime(df_processed["timestamp"]).dt.tz_localize("UTC")
+    df_merged = pd.merge(
+        df_processed,
+        connected_satellites,
+        left_on="timestamp",
+        right_on="Timestamp",
+        how="inner",
+    )
+
+    centralLat = df_merged["lat"].mean()
+    centralLon = df_merged["lon"].mean()
+    projStereographic = ccrs.Stereographic(central_longitude=centralLon, central_latitude=centralLat)
 
     if not df_rtt.empty:
         df_rtt["timestamp"] = pd.to_datetime(df_rtt["timestamp"], unit="s", utc=True)
@@ -371,8 +381,11 @@ def plot():
         df_cumulative_obstruction_map = cumulative_obstruction_map(df_obstruction_map)
 
     HOME_POP = get_home_pop()
-
-    CPU_COUNT = os.cpu_count() - 1 if os.cpu_count() > 1 else 1
+    CPU_COUNT = os.cpu_count()
+    if CPU_COUNT is None or CPU_COUNT <= 2:
+        CPU_COUNT = 1
+    else:
+        CPU_COUNT = CPU_COUNT - 1
     print(f"Process count: {CPU_COUNT}")
 
     POP_DATA = get_pop_data(centralLat, centralLon, offsetLat, offsetLon)
@@ -382,14 +395,7 @@ def plot():
             # plot_once(row, df_obstruction_map, df_rtt, df_sinr, all_satellites)
             result = pool.apply_async(
                 plot_once,
-                args=(
-                    row,
-                    df_obstruction_map,
-                    df_cumulative_obstruction_map,
-                    df_rtt,
-                    df_sinr,
-                    all_satellites,
-                ),
+                args=(row, df_obstruction_map, df_cumulative_obstruction_map, df_rtt, df_sinr, all_satellites),
             )
             results.append(result)
 
@@ -448,176 +454,6 @@ def create_video(fps, filename):
     print(f"Video created: {filename}.mp4")
 
 
-def plot_data(
-    df_obstruction_map: pd.DataFrame,
-    df_rtt: pd.DataFrame,
-    df_status: pd.DataFrame,
-    df_location: pd.DataFrame,
-    all_satellites: List[str],
-    timestamp_str: str,
-) -> None:
-    """Plot data for a specific timestamp."""
-    try:
-        # Create figure with subplots
-        fig = plt.figure(figsize=(15, 10))
-        gs01 = fig.add_gridspec(4, 2, height_ratios=[1, 1, 1, 1])
-
-        # Plot RTT data
-        axFullRTT = fig.add_subplot(gs01[0, :])
-        if not df_rtt.empty:
-            axFullRTT.plot(
-                df_rtt["timestamp"],
-                df_rtt["rtt"],
-                color="blue",
-                label="RTT",
-            )
-            axFullRTT.axvline(
-                x=pd.to_datetime(timestamp_str, utc=True),
-                color="red",
-                linestyle="--",
-                label="Selected Time",
-            )
-            axFullRTT.set_title("RTT")
-            axFullRTT.set_ylabel("RTT (ms)")
-            axFullRTT.legend()
-
-        # Plot SINR data
-        axFullSINR = fig.add_subplot(gs01[1, :], sharex=axFullRTT)
-        if not df_status.empty:
-            axFullSINR.plot(
-                df_status["timestamp"],
-                df_status["sinr"],
-                color="green",
-                label="SINR",
-            )
-            axFullSINR.axvline(
-                x=pd.to_datetime(timestamp_str, utc=True),
-                color="red",
-                linestyle="--",
-                label="Selected Time",
-            )
-            axFullSINR.set_title("SINR")
-            axFullSINR.set_ylabel("SINR (dB)")
-            axFullSINR.legend()
-
-        # Plot location data
-        axLocation = fig.add_subplot(gs01[2, :], sharex=axFullRTT)
-        if not df_location.empty:
-            axLocation.plot(
-                df_location["utc_time"],
-                df_location["lat"],
-                color="purple",
-                label="Latitude",
-            )
-            axLocation.plot(
-                df_location["utc_time"],
-                df_location["lon"],
-                color="orange",
-                label="Longitude",
-            )
-            axLocation.axvline(
-                x=pd.to_datetime(timestamp_str, utc=True),
-                color="red",
-                linestyle="--",
-                label="Selected Time",
-            )
-            axLocation.set_title("Location")
-            axLocation.set_ylabel("Degrees")
-            axLocation.legend()
-
-        # Plot zoomed data
-        zoom_start = pd.to_datetime(timestamp_str, utc=True) - pd.Timedelta(minutes=5)
-        zoom_end = pd.to_datetime(timestamp_str, utc=True) + pd.Timedelta(minutes=5)
-
-        # Zoomed RTT
-        axRTT = fig.add_subplot(gs01[3, 0])
-        if not df_rtt.empty:
-            df_rtt_zoomed = df_rtt[(df_rtt["timestamp"] >= zoom_start) & (df_rtt["timestamp"] <= zoom_end)]
-            axRTT.plot(
-                df_rtt_zoomed["timestamp"],
-                df_rtt_zoomed["rtt"],
-                color="blue",
-                label="RTT",
-            )
-            axRTT.axvline(
-                x=pd.to_datetime(timestamp_str, utc=True),
-                color="red",
-                linestyle="--",
-                label="Selected Time",
-            )
-            axRTT.set_title(f"RTT at {timestamp_str}")
-            axRTT.set_ylabel("RTT (ms)")
-            axRTT.legend()
-
-        # Zoomed SINR
-        axSINR = fig.add_subplot(gs01[3, 1], sharex=axRTT)
-        if not df_status.empty:
-            df_status_zoomed = df_status[(df_status["timestamp"] >= zoom_start) & (df_status["timestamp"] <= zoom_end)]
-            axSINR.plot(
-                df_status_zoomed["timestamp"],
-                df_status_zoomed["sinr"],
-                color="green",
-                label="SINR",
-            )
-            axSINR.axvline(
-                x=pd.to_datetime(timestamp_str, utc=True),
-                color="red",
-                linestyle="--",
-                label="Selected Time",
-            )
-            axSINR.set_title(f"SINR at {timestamp_str}")
-            axSINR.set_ylabel("SINR (dB)")
-            axSINR.legend()
-
-        plt.tight_layout()
-        plt.show()
-
-    except Exception as e:
-        logger.error(f"Error plotting data: {str(e)}", exc_info=True)
-
-
-def main() -> None:
-    """Main function to plot data."""
-    try:
-        # Get data files
-        STATUS_DATA = Path(DATA_DIR).joinpath(f"grpc/{DATE}/GRPC_STATUS-{DATE_TIME}.csv")
-        LOCATION_DATA = Path(DATA_DIR).joinpath(f"grpc/{DATE}/GRPC_LOCATION-{DATE_TIME}.csv")
-        RTT_DATA = Path(DATA_DIR).joinpath(f"rtt/{DATE}/RTT-{DATE_TIME}.csv")
-        OBSTRUCTION_DATA = Path(DATA_DIR).joinpath(f"obstruction-data-{DATE_TIME}.csv")
-
-        # Read data
-        df_status = pd.read_csv(STATUS_DATA)
-        df_location = pd.read_csv(LOCATION_DATA)
-        df_rtt = pd.read_csv(RTT_DATA)
-        df_obstruction_map = pd.read_csv(OBSTRUCTION_DATA)
-
-        # Convert timestamps
-        if not df_status.empty:
-            df_status["timestamp"] = pd.to_datetime(df_status["timestamp"], unit="s", utc=True)
-        if not df_location.empty:
-            df_location["utc_time"] = pd.to_datetime(df_location["utc_time"], utc=True)
-        if not df_rtt.empty:
-            df_rtt["timestamp"] = pd.to_datetime(df_rtt["timestamp"], unit="s", utc=True)
-
-        # Get all satellites
-        all_satellites = df_obstruction_map["satellite"].unique().tolist()
-
-        # Plot data for each timestamp
-        for _, row in df_obstruction_map.iterrows():
-            timestamp_str = row["Timestamp"]
-            plot_data(
-                df_obstruction_map,
-                df_rtt,
-                df_status,
-                df_location,
-                all_satellites,
-                timestamp_str,
-            )
-
-    except Exception as e:
-        logger.error(f"Error in main: {str(e)}", exc_info=True)
-
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="LEOViz | Starlink metrics collection")
 
@@ -633,15 +469,8 @@ if __name__ == "__main__":
         required=True,
         help="Experiment ID in the data directory, format: YYYY-MM-DD-HH-mm-ss, e.g., 2025-04-13-04-00-00",
     )
-    parser.add_argument("--lat", type=float, required=True, help="Dish latitude")
-    parser.add_argument("--lon", type=float, required=True, help="Dish longitude")
     parser.add_argument("--fps", type=int, default=5, help="FPS for the generated video")
     args = parser.parse_args()
-
-    if args.lat and args.lon:
-        centralLat = args.lat
-        centralLon = args.lon
-        projStereographic = ccrs.Stereographic(central_longitude=centralLon, central_latitude=centralLat)
 
     DATA_DIR = args.dir
     DATE_TIME = args.id
@@ -649,6 +478,7 @@ if __name__ == "__main__":
 
     OBSTRUCTION_MAP_DATA = Path(DATA_DIR).joinpath(f"grpc/{DATE}/obstruction_map-{DATE_TIME}.parquet")
     SINR_DATA = Path(DATA_DIR).joinpath(f"grpc/{DATE}/GRPC_STATUS-{DATE_TIME}.csv")
+    PROCESSED_DATA = Path(DATA_DIR).joinpath(f"processed_obstruction-data-{DATE_TIME}.csv")
     LATENCY_DATA = Path(DATA_DIR).joinpath(f"latency/{DATE}/ping-10ms-{DATE_TIME}.txt")
     TLE_DATA = Path(DATA_DIR).joinpath(f"TLE/{DATE}/starlink-tle-{DATE_TIME}.txt")
 

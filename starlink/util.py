@@ -103,6 +103,7 @@ def load_tle_from_file(filename):
 
 def load_connected_satellites(filename):
     df = pd.read_csv(filename)
+    df["Timestamp"] = pd.to_datetime(df["Timestamp"])
     return df
 
 
