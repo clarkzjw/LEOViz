@@ -76,14 +76,7 @@ def get_starlink_generation_by_norad_id(norad_id):
         return "Unknown"
 
 
-def plot_once(
-    row,
-    df_obstruction_map,
-    df_cumulative_obstruction_map,
-    df_rtt,
-    df_sinr,
-    all_satellites,
-):
+def plot_once(row, df_obstruction_map, df_cumulative_obstruction_map, df_rtt, df_sinr, all_satellites):
     timestamp_str = row["Timestamp"].strftime("%Y-%m-%d %H:%M:%S%z")
     connected_sat_name = row["Connected_Satellite"]
     plot_current = pd.to_datetime(timestamp_str, format="%Y-%m-%d %H:%M:%S%z")
@@ -114,17 +107,11 @@ def plot_once(
         FRAME_TYPE = "FRAME_UT"
 
     currentObstructionMap = get_obstruction_map_by_timestamp(df_obstruction_map, timestamp_str)
-    axObstructionMapInstantaneous.imshow(
-        currentObstructionMap,
-        cmap="gray",
-    )
+    axObstructionMapInstantaneous.imshow(currentObstructionMap, cmap="gray")
     axObstructionMapInstantaneous.set_title("Instantaneous satellite trajectory from gRPC")
 
     cumulativeObstructionMap = get_obstruction_map_by_timestamp(df_cumulative_obstruction_map, timestamp_str)
-    axObstructionMapCumulative.imshow(
-        cumulativeObstructionMap,
-        cmap="gray",
-    )
+    axObstructionMapCumulative.imshow(cumulativeObstructionMap, cmap="gray")
     axObstructionMapCumulative.set_title(f"Cumulative obstruction map, frame type: {FRAME_TYPE}")
 
     axSat.set_extent(
@@ -152,14 +139,7 @@ def plot_once(
     axFOV.set_theta_direction(-1)
     axFOV.grid(True)
 
-    axSat.scatter(
-        centralLon,
-        centralLat,
-        transform=projPlateCarree,
-        color="green",
-        label="Dish",
-        s=10,
-    )
+    axSat.scatter(centralLon, centralLat, transform=projPlateCarree, color="green", label="Dish", s=10)
 
     try:
         axSat.scatter(
@@ -180,28 +160,13 @@ def plot_once(
             if name == HOME_POP:
                 color = "red"
 
-            axSat.text(
-                lon,
-                lat,
-                name,
-                transform=projPlateCarree,
-                fontsize=10,
-                color=color,
-                wrap=True,
-                clip_on=True,
-            )
+            axSat.text(lon, lat, name, transform=projPlateCarree, fontsize=10, color=color, wrap=True, clip_on=True)
     except Exception as e:
         print(str(e))
 
     if not df_rtt.empty:
         axFullRTT.plot(
-            df_rtt["timestamp"],
-            df_rtt["rtt"],
-            color="blue",
-            label="RTT",
-            linestyle="None",
-            markersize=1,
-            marker=".",
+            df_rtt["timestamp"], df_rtt["rtt"], color="blue", label="RTT", linestyle="None", markersize=1, marker="."
         )
         axFullRTT.axvline(
             x=plot_current,
@@ -214,20 +179,10 @@ def plot_once(
         timestamp_str, connected_sat_name, all_satellites
     )
     axSat.scatter(
-        connected_sat_lon,
-        connected_sat_lat,
-        transform=projPlateCarree,
-        color="blue",
-        label=connected_sat_name,
-        s=30,
+        connected_sat_lon, connected_sat_lat, transform=projPlateCarree, color="blue", label=connected_sat_name, s=30
     )
     axSat.text(
-        connected_sat_lon,
-        connected_sat_lat,
-        connected_sat_name,
-        transform=projPlateCarree,
-        fontsize=10,
-        color="red",
+        connected_sat_lon, connected_sat_lat, connected_sat_name, transform=projPlateCarree, fontsize=10, color="red"
     )
 
     axSat.plot(
@@ -241,13 +196,7 @@ def plot_once(
     if all_satellites_in_canvas:
         satellite_lons = [s[1] for s in all_satellites_in_canvas]
         satellite_lats = [s[0] for s in all_satellites_in_canvas]
-        axSat.scatter(
-            satellite_lons,
-            satellite_lats,
-            transform=projPlateCarree,
-            color="gray",
-            s=30,
-        )
+        axSat.scatter(satellite_lons, satellite_lats, transform=projPlateCarree, color="gray", s=30)
 
     axSat.set_title(f"Timestamp: {timestamp_str}, Connected satellite: {connected_sat_name}, {connected_sat_gen}")
     axSat.legend(loc="upper left")
@@ -255,10 +204,7 @@ def plot_once(
     if not df_rtt.empty:
         axFullRTT.set_title("RTT")
         axFullRTT.set_ylabel("RTT (ms)")
-        axFullRTT.set_xlim(
-            df_rtt.iloc[0]["timestamp"],
-            df_rtt.iloc[-1]["timestamp"],
-        )
+        axFullRTT.set_xlim(df_rtt.iloc[0]["timestamp"], df_rtt.iloc[-1]["timestamp"])
 
     zoom_start = plot_current - pd.Timedelta(minutes=1)
     zoom_end = plot_current + pd.Timedelta(minutes=1)
@@ -274,11 +220,7 @@ def plot_once(
             markersize=1,
             marker=".",
         )
-        axRTT.axvline(
-            x=plot_current,
-            color="red",
-            linestyle="--",
-        )
+        axRTT.axvline(x=plot_current, color="red", linestyle="--")
         axRTT.set_ylim(0, 100)
         axRTT.set_title(f"RTT at {timestamp_str}")
         axRTT.set_ylabel("RTT (ms)")
@@ -326,13 +268,7 @@ def plot():
     connected_satellites = load_connected_satellites(f"{DATA_DIR}/serving_satellite_data-{DATE_TIME}.csv")
 
     df_processed["timestamp"] = pd.to_datetime(df_processed["timestamp"]).dt.tz_localize("UTC")
-    df_merged = pd.merge(
-        df_processed,
-        connected_satellites,
-        left_on="timestamp",
-        right_on="Timestamp",
-        how="inner",
-    )
+    df_merged = pd.merge(df_processed, connected_satellites, left_on="timestamp", right_on="Timestamp", how="inner")
 
     centralLat = df_merged["lat"].mean()
     centralLon = df_merged["lon"].mean()
@@ -423,12 +359,7 @@ def create_video(fps, filename):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="LEOViz | Starlink metrics collection")
 
-    parser.add_argument(
-        "--dir",
-        type=str,
-        default="./data",
-        help="Directory with measurement results",
-    )
+    parser.add_argument("--dir", type=str, default="./data", help="Directory with measurement results")
     parser.add_argument(
         "--id",
         type=str,
