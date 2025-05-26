@@ -28,17 +28,18 @@ import starlink_grpc
 
 logger = logging.getLogger(__name__)
 
+
 class JobManager:
     """Manages and executes various Starlink data collection jobs.
-    
+
     This class coordinates the collection and processing of different types of data
     from the Starlink dish, including status information, GPS diagnostics, and
     obstruction maps.
     """
-    
+
     def __init__(self):
         """Initialize the JobManager with necessary components.
-        
+
         Sets up data directories, timeouts, and initializes required processors
         and extractors.
         """
@@ -50,11 +51,11 @@ class JobManager:
 
     def grpc_status_job(self) -> None:
         """Collect dish status data over time.
-        
+
         This job continuously collects status information from the dish for a
         specified duration, including signal strength, throughput, and alignment
         data. Data is saved to a CSV file with timestamps.
-        
+
         Note:
             The job runs for DURATION_SECONDS and collects data every 0.5 seconds.
         """
@@ -70,11 +71,11 @@ class JobManager:
         with open(status_filename, "w", newline="") as status_file:
             status_writer = csv.writer(status_file)
             self.data_extracter.write_status_csv_header(status_writer)
-            
+
             try:
                 # Record start time for duration tracking
                 start_time = time.time()
-                
+
                 # Collect data for specified duration
                 while time.time() < start_time + DURATION_SECONDS:
                     # Get status data with current time
@@ -83,7 +84,7 @@ class JobManager:
                     if status_row:
                         status_writer.writerow(status_row)
                         status_file.flush()
-                    
+
                     time.sleep(0.5)
 
                 logger.info(f"Dish status data saved to {status_filename}")
@@ -93,10 +94,10 @@ class JobManager:
 
     def grpc_gps_diagnostics_job(self) -> None:
         """Collect GPS diagnostics data over time for mobile installations.
-        
+
         This job continuously collects GPS location data from the dish for a
         specified duration. Data is saved to a CSV file with timestamps.
-        
+
         Note:
             - Only runs when config.MOBILE is True
             - The job runs for DURATION_SECONDS and collects data every 0.5 seconds
@@ -117,11 +118,11 @@ class JobManager:
         with open(gps_diagnostics, "w", newline="") as gps_diagnostics_file:
             gps_diagnostics_writer = csv.writer(gps_diagnostics_file)
             self.data_extracter.write_location_csv_header(gps_diagnostics_writer)
-            
+
             try:
                 # Record start time for duration tracking
                 start_time = time.time()
-                
+
                 # Collect data for specified duration
                 while time.time() < start_time + DURATION_SECONDS:
                     # Get GPS diagnostics data with current time
@@ -130,25 +131,29 @@ class JobManager:
                     if gps_diagnostics_row:
                         gps_diagnostics_writer.writerow(gps_diagnostics_row)
                         gps_diagnostics_file.flush()
-                    
+
                     time.sleep(0.5)
 
                 logger.info(f"Location data saved to {gps_diagnostics}")
 
             except Exception as e:
-                logger.error(f"Error monitoring GPS diagnostics: {str(e)}", exc_info=True)
+                logger.error(
+                    f"Error monitoring GPS diagnostics: {str(e)}", exc_info=True
+                )
 
-    def _collect_timeslot_data(self, timeslot_start: float) -> Optional[Dict[str, List[Any]]]:
+    def _collect_timeslot_data(
+        self, timeslot_start: float
+    ) -> Optional[Dict[str, List[Any]]]:
         """Collect obstruction data for a single timeslot.
-        
+
         Args:
             timeslot_start: Timestamp when the timeslot began.
-            
+
         Returns:
             Optional[Dict[str, List[Any]]]: Dictionary containing:
                 - timestamp: List of timestamps for each measurement
                 - obstruction_map: List of obstruction map arrays
-                
+
         Note:
             - Collects data for TimeslotManager.TIMESLOT_DURATION seconds
             - Measurements are taken every 0.5 seconds
@@ -180,11 +185,11 @@ class JobManager:
 
     def get_obstruction_map_job(self) -> None:
         """Collect and process obstruction map data over time.
-        
+
         This job continuously collects obstruction map data from the dish for a
         specified duration. Data is processed in timeslots and saved to both
         CSV and parquet files. A video visualization is also created.
-        
+
         Note:
             - For static installations, requires LATITUDE, LONGITUDE, and ALTITUDE in config
             - The job runs for DURATION_SECONDS
@@ -196,8 +201,12 @@ class JobManager:
         logger.info(f"{name}, {threading.current_thread()}")
 
         # Validate location requirements for static installation
-        if not config.MOBILE and not all([config.LATITUDE, config.LONGITUDE, config.ALTITUDE]):
-            logger.error("Static installation requires LATITUDE, LONGITUDE, and ALTITUDE in config")
+        if not config.MOBILE and not all(
+            [config.LATITUDE, config.LONGITUDE, config.ALTITUDE]
+        ):
+            logger.error(
+                "Static installation requires LATITUDE, LONGITUDE, and ALTITUDE in config"
+            )
             return
 
         # Generate filenames with current timestamp
@@ -214,7 +223,7 @@ class JobManager:
         # Open CSV file for writing obstruction data
         with open(obstruction_data_filename, "w", newline="") as csvfile:
             writer = csv.writer(csvfile)
-            writer.writerow(['timestamp', 'Y', 'X'])
+            writer.writerow(["timestamp", "Y", "X"])
             last_timeslot_second = None
 
             while time.time() < start + DURATION_SECONDS:
@@ -242,7 +251,9 @@ class JobManager:
                         while datetime.now(timezone.utc) < start_time:
                             time.sleep(0.1)
                     else:
-                        last_timeslot_second = TimeslotManager.wait_until_target_time(last_timeslot_second)
+                        last_timeslot_second = TimeslotManager.wait_until_target_time(
+                            last_timeslot_second
+                        )
 
                     # Reset obstruction map for new data collection
                     self.grpc.reset_obstruction_map()
@@ -252,11 +263,20 @@ class JobManager:
                     timeslot_data = self._collect_timeslot_data(timeslot_start)
                     if timeslot_data:
                         timeslot_df = pd.DataFrame(timeslot_data)
-                        
+                        # although this is a bit redundant, as frame_type most likely change during a short term measurement
+                        timeslot_df["frame_type"] = frame_type_int
+
                         # Start processing thread for the timeslot
                         processing_thread = threading.Thread(
                             target=self.data_extracter.process_obstruction_estimate_satellites_per_timeslot,
-                            args=(timeslot_df, writer, csvfile, filename, dt_string, date, frame_type_int),
+                            args=(
+                                timeslot_df,
+                                writer,
+                                csvfile,
+                                filename,
+                                dt_string,
+                                date,
+                            ),
                         )
                         processing_thread.start()
                         thread_pool.append(processing_thread)

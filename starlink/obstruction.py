@@ -16,44 +16,48 @@ from timeslot_manager import TimeslotManager
 
 logger = logging.getLogger(__name__)
 
+
 class ObstructionMap:
     """Handles processing and visualization of Starlink dish obstruction maps.
-    
+
     This class provides functionality for processing, analyzing, and visualizing
     obstruction map data from the Starlink dish. It handles data collection,
     processing, and conversion to various formats including CSV, parquet, and video.
-    
+
     Attributes:
         map_size (int): Size of the obstruction map (123x123 pixels)
     """
-    
+
     def __init__(self):
         """Initialize the ObstructionMap processor.
-        
+
         Sets up the map size constant used for processing obstruction data.
         """
         self.map_size = 123  # Size of the obstruction map (123x123)
 
-    def process_data(self, df_obstruction_map: pd.DataFrame) -> List[Tuple[datetime, float, float]]:
+    # TODO: not used?
+    def process_data(
+        self, df_obstruction_map: pd.DataFrame
+    ) -> List[Tuple[datetime, float, float]]:
         """Process obstruction data and return list of timestamps and angles.
-        
+
         Args:
             df_obstruction_map: DataFrame containing obstruction map data with
                 timestamp, elevation, and azimuth columns.
-                
+
         Returns:
             List[Tuple[datetime, float, float]]: List of tuples containing:
                 - datetime: Timestamp of the measurement
                 - float: Elevation angle
                 - float: Azimuth angle
-                
+
         Note:
             Returns an empty list if processing fails.
         """
         try:
             results = []
             for _, row in df_obstruction_map.iterrows():
-                timestamp_dt = pd.to_datetime(row["timestamp"], unit='s')
+                timestamp_dt = pd.to_datetime(row["timestamp"], unit="s")
                 elevation = row["elevation"]
                 azimuth = row["azimuth"]
                 results.append((timestamp_dt, elevation, azimuth))
@@ -62,85 +66,96 @@ class ObstructionMap:
             logger.error(f"Error processing obstruction data: {str(e)}", exc_info=True)
             return []
 
-    def get_time_range(self, df_obstruction_map: pd.DataFrame) -> Tuple[datetime, datetime]:
+    # TODO: not used?
+    def get_time_range(
+        self, df_obstruction_map: pd.DataFrame
+    ) -> Tuple[datetime, datetime]:
         """Get start and end times from obstruction map data.
-        
+
         Args:
             df_obstruction_map: DataFrame containing obstruction map data with
                 timestamp column.
-                
+
         Returns:
             Tuple[datetime, datetime]: A tuple containing:
                 - datetime: Start time of the data
                 - datetime: End time of the data
-                
+
         Note:
             Returns (None, None) if time range cannot be determined.
         """
         try:
             start_time = pd.to_datetime(
-                df_obstruction_map.iloc[0]["timestamp"], unit='s'
+                df_obstruction_map.iloc[0]["timestamp"], unit="s"
             )
             end_time = pd.to_datetime(
-                df_obstruction_map.iloc[-1]["timestamp"], unit='s'
+                df_obstruction_map.iloc[-1]["timestamp"], unit="s"
             )
             return start_time, end_time
         except Exception as e:
             logger.error(f"Error getting time range: {str(e)}", exc_info=True)
             return None, None
 
-    def calculate_angles(self, df_obstruction_map: pd.DataFrame) -> Optional[pd.DataFrame]:
+    # TODO: not used?
+    def calculate_angles(
+        self, df_obstruction_map: pd.DataFrame
+    ) -> Optional[pd.DataFrame]:
         """Calculate obstruction angles from obstruction map data.
-        
+
         Args:
             df_obstruction_map: DataFrame containing obstruction map data with
                 elevation and azimuth columns.
-                
+
         Returns:
             Optional[pd.DataFrame]: DataFrame with added angle column, or None if
                 calculation fails.
-                
+
         Note:
             The angle is calculated using arctan2(elevation, azimuth).
         """
         try:
             # Convert timestamps
             df_obstruction_map["timestamp"] = pd.to_datetime(
-                df_obstruction_map["timestamp"], unit='s'
+                df_obstruction_map["timestamp"], unit="s"
             )
 
             # Calculate angles
             df_obstruction_map["angle"] = np.arctan2(
-                df_obstruction_map["elevation"],
-                df_obstruction_map["azimuth"]
+                df_obstruction_map["elevation"], df_obstruction_map["azimuth"]
             )
 
             return df_obstruction_map
 
         except Exception as e:
-            logger.error(f"Error calculating obstruction angles: {str(e)}", exc_info=True)
+            logger.error(
+                f"Error calculating obstruction angles: {str(e)}", exc_info=True
+            )
             return None
 
     def process_timeslot(self, timeslot_df: pd.DataFrame, writer: csv.writer) -> None:
         """Process obstruction data for a single timeslot.
-        
+
         Args:
             timeslot_df: DataFrame containing obstruction map data for a timeslot
             writer: CSV writer object for output
-            
+
         Note:
             - Processes data in 123x123 pixel maps
             - Tracks changes in obstruction patterns
             - Writes timestamp and coordinates of changes to CSV
         """
         previous_obstruction_map = timeslot_df.iloc[0]["obstruction_map"]
-        previous_obstruction_map = previous_obstruction_map.reshape(self.map_size, self.map_size)
+        previous_obstruction_map = previous_obstruction_map.reshape(
+            self.map_size, self.map_size
+        )
 
         hold_coord = None
         white_pixel_coords = []
         for _, row in timeslot_df.iterrows():
-            timestamp_dt = pd.to_datetime(row["timestamp"], unit='s')
-            obstruction_map = row["obstruction_map"].reshape(self.map_size, self.map_size)
+            timestamp_dt = pd.to_datetime(row["timestamp"], unit="s")
+            obstruction_map = row["obstruction_map"].reshape(
+                self.map_size, self.map_size
+            )
             xor_map = np.bitwise_xor(previous_obstruction_map, obstruction_map)
             coords = np.argwhere(xor_map == 1)
 
@@ -158,30 +173,29 @@ class ObstructionMap:
         for coord in white_pixel_coords:
             writer.writerow(
                 [
-                    coord[0].strftime("%Y-%m-%d %H:%M:%S"),
+                    coord[0],
                     coord[1][0],
                     coord[1][1],
                 ]
             )
 
+    # TODO: not used?
     def process_maps(self, df_obstruction_map: pd.DataFrame, uuid: str) -> None:
         """Process multiple obstruction maps over time.
-        
+
         Args:
             df_obstruction_map: DataFrame containing obstruction map data
             uuid: Unique identifier for the output files
-            
+
         Note:
             - Processes data in 15-second timeslots
             - Creates CSV file with obstruction data
             - Handles timezone-aware timestamps
         """
         start_time_dt = pd.to_datetime(
-            df_obstruction_map.iloc[0]["timestamp"], unit='s'
+            df_obstruction_map.iloc[0]["timestamp"], unit="s"
         )
-        end_time_dt = pd.to_datetime(
-            df_obstruction_map.iloc[-1]["timestamp"], unit='s'
-        )
+        end_time_dt = pd.to_datetime(df_obstruction_map.iloc[-1]["timestamp"], unit="s")
 
         with open(
             f"{DATA_DIR}/obstruction-data-{uuid}.csv",
@@ -194,14 +208,19 @@ class ObstructionMap:
             while current_time < end_time_dt:
                 # Get next timeslot
                 _, timeslot_endtime_dt = TimeslotManager.get_next_timeslot()
-                
+
                 # Adjust timeslot end time to match our data's timezone
-                timeslot_endtime_dt = timeslot_endtime_dt.replace(tzinfo=current_time.tzinfo)
+                timeslot_endtime_dt = timeslot_endtime_dt.replace(
+                    tzinfo=current_time.tzinfo
+                )
 
                 # Get data for current timeslot
                 timeslot_df = df_obstruction_map[
                     (df_obstruction_map["timestamp"] >= current_time.timestamp())
-                    & (df_obstruction_map["timestamp"] < timeslot_endtime_dt.timestamp())
+                    & (
+                        df_obstruction_map["timestamp"]
+                        < timeslot_endtime_dt.timestamp()
+                    )
                 ]
 
                 if len(timeslot_df) == 0:
@@ -213,12 +232,12 @@ class ObstructionMap:
 
     def create_video(self, filename: str, uuid: str, fps: int) -> None:
         """Create a video visualization of the obstruction map.
-        
+
         Args:
             filename: Path to the parquet file containing obstruction map data
             uuid: Unique identifier for the output video file
             fps: Frames per second for the output video
-            
+
         Note:
             - Creates an MP4 video file
             - Converts binary obstruction maps to grayscale images
@@ -232,9 +251,11 @@ class ObstructionMap:
             fps,
             (self.map_size, self.map_size),
         )
-        
+
         for _, row in df.iterrows():
-            obstruction_map = row["obstruction_map"].reshape(self.map_size, self.map_size)
+            obstruction_map = row["obstruction_map"].reshape(
+                self.map_size, self.map_size
+            )
             image_data = (obstruction_map * 255).astype(np.uint8)
             image_data_bgr = cv2.cvtColor(image_data, cv2.COLOR_GRAY2BGR)
             out.write(image_data_bgr)
@@ -243,11 +264,11 @@ class ObstructionMap:
 
     def write_parquet(self, filename: str, timeslot_df: pd.DataFrame) -> None:
         """Write obstruction map data to parquet file.
-        
+
         Args:
             filename: Path to the output parquet file
             timeslot_df: DataFrame containing obstruction map data for a timeslot
-            
+
         Note:
             - Appends to existing file if it exists
             - Creates new file if it doesn't exist
