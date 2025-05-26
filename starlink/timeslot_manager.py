@@ -1,17 +1,19 @@
-import logging
-from datetime import datetime, timedelta, timezone
-from typing import List, Tuple
 import time
+import logging
+
+from typing import Tuple
+from datetime import datetime, timedelta, timezone
 
 logger = logging.getLogger(__name__)
 
+
 class TimeslotManager:
     """Manages time slots for data collection and processing.
-    
+
     This class handles the creation and management of time slots for collecting
     and processing Starlink dish data. It provides methods for generating
     time slots and managing their boundaries.
-    
+
     Attributes:
         None
     """
@@ -23,46 +25,40 @@ class TimeslotManager:
     @staticmethod
     def get_next_timeslot() -> Tuple[datetime, datetime]:
         """Get the next time slot for data collection.
-        
+
         Returns:
             Tuple[datetime, datetime]: A tuple containing:
                 - datetime: Start time of the next slot
                 - datetime: End time of the next slot
-                
+
         Note:
             - Time slots are 15 seconds long
             - Times are in UTC
             - End time is exclusive
         """
         current_time = datetime.now(timezone.utc)
-        slot_start = current_time.replace(
-            second=(current_time.second // 15) * 15,
-            microsecond=0
-        )
+        slot_start = current_time.replace(second=(current_time.second // 15) * 15, microsecond=0)
         slot_end = slot_start + timedelta(seconds=15)
         return slot_start, slot_end
 
     @staticmethod
     def get_timeslot_boundaries(timestamp: datetime) -> Tuple[datetime, datetime]:
         """Get the time slot boundaries for a given timestamp.
-        
+
         Args:
             timestamp: The timestamp to get boundaries for
-            
+
         Returns:
             Tuple[datetime, datetime]: A tuple containing:
                 - datetime: Start time of the slot
                 - datetime: End time of the slot
-                
+
         Note:
             - Time slots are 15 seconds long
             - End time is exclusive
             - Times are in UTC
         """
-        slot_start = timestamp.replace(
-            second=(timestamp.second // 15) * 15,
-            microsecond=0
-        )
+        slot_start = timestamp.replace(second=(timestamp.second // 15) * 15, microsecond=0)
         slot_end = slot_start + timedelta(seconds=15)
         return slot_start, slot_end
 

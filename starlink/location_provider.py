@@ -1,7 +1,8 @@
 import logging
-from typing import Optional, Any, Tuple
+from typing import Optional, Any
+
 import pandas as pd
-from skyfield.api import load, wgs84, utc
+from skyfield.api import wgs84
 
 import config
 
@@ -23,9 +24,7 @@ class LocationProvider:
         """Initialize the LocationProvider."""
         pass
 
-    def get_observer_location(
-        self, df_gps_diagnostics: Optional[pd.DataFrame] = None
-    ) -> Optional[Any]:
+    def get_observer_location(self, df_gps_diagnostics: Optional[pd.DataFrame] = None) -> Optional[Any]:
         """Get the observer location for satellite calculations.
 
         Args:
@@ -44,9 +43,7 @@ class LocationProvider:
         try:
             if config.MOBILE:
                 if df_gps_diagnostics is None or df_gps_diagnostics.empty:
-                    logger.error(
-                        "GPS diagnostics data is required for mobile installations"
-                    )
+                    logger.error("GPS diagnostics data is required for mobile installations")
                     return None
 
                 # Get the most recent GPS data
@@ -68,24 +65,18 @@ class LocationProvider:
             logger.error(f"Error getting observer location: {str(e)}", exc_info=True)
             return None
 
-    def get_mobile_location_at_time(
-        self, df_location: pd.DataFrame, timestamp: float
-    ) -> Optional[Any]:
+    def get_mobile_location_at_time(self, df_location: pd.DataFrame, timestamp: float) -> Optional[Any]:
         """Get location data for a specific timestamp."""
         try:
             # Convert timestamp to datetime
             target_time = pd.to_datetime(timestamp, unit="s", utc=True)
 
             # Find closest timestamp in location data
-            df_location["timestamp"] = pd.to_datetime(
-                df_location["timestamp"], unit="s", utc=True
-            )
+            df_location["timestamp"] = pd.to_datetime(df_location["timestamp"], unit="s", utc=True)
             closest_idx = (df_location["timestamp"] - target_time).abs().idxmin()
             location_data = df_location.iloc[closest_idx]
 
-            return wgs84.latlon(
-                location_data["lat"], location_data["lon"], location_data["alt"]
-            )
+            return wgs84.latlon(location_data["lat"], location_data["lon"], location_data["alt"])
 
         except Exception as e:
             logger.error(f"Error getting mobile location: {str(e)}", exc_info=True)

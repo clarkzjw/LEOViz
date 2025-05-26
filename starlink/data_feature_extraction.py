@@ -1,15 +1,14 @@
 import os
-import logging
-import pandas as pd
-import numpy as np
-import time
-from datetime import datetime
-from pathlib import Path
-from typing import List, Tuple, Optional, Dict, Any
 import csv
+import time
+import logging
+
+from typing import List, Tuple, Optional, Dict, Any
+from datetime import datetime
+
+import pandas as pd
 
 import config
-from location_provider import LocationProvider
 from obstruction import ObstructionMap
 
 logger = logging.getLogger(__name__)
@@ -74,9 +73,7 @@ class DataFeatureExtraction:
         """Write CSV header for location data."""
         csv_writer.writerow(self.location_columns)
 
-    def extract_status_fields(
-        self, status: Dict[str, Any], current_time: Optional[float] = None
-    ) -> List[Any]:
+    def extract_status_fields(self, status: Dict[str, Any], current_time: Optional[float] = None) -> List[Any]:
         """Extract fields for dish status data."""
         alignment = status.get("alignmentStats", {})
         quaternion = status.get("ned2dishQuaternion", {})
@@ -99,9 +96,7 @@ class DataFeatureExtraction:
             quaternion.get("qZ", 0),
         ]
 
-    def extract_location_fields(
-        self, diagnostics: Dict[str, Any], current_time: Optional[float] = None
-    ) -> List[Any]:
+    def extract_location_fields(self, diagnostics: Dict[str, Any], current_time: Optional[float] = None) -> List[Any]:
         """Extract fields for location data from diagnostics."""
         location = diagnostics.get("dishGetDiagnostics", {}).get("location", {})
         gps_time = location.get("gpsTimeS", 0)
@@ -145,22 +140,13 @@ class DataFeatureExtraction:
         try:
             # Read obstruction data
             df_obstruction = pd.read_csv(filename)
-            df_obstruction["timestamp"] = pd.to_datetime(
-                df_obstruction["timestamp"], format="%Y-%m-%d %H:%M:%S.%f"
-            )
-            df_obstruction = (
-                df_obstruction.set_index("timestamp")
-                .resample("1s")
-                .mean()
-                .reset_index()
-            )
+            df_obstruction["timestamp"] = pd.to_datetime(df_obstruction["timestamp"], format="%Y-%m-%d %H:%M:%S.%f")
+            df_obstruction = df_obstruction.set_index("timestamp").resample("1s").mean().reset_index()
 
             # Convert status timestamps
             df_status["timestamp"] = pd.to_datetime(df_status["timestamp"], unit="s")
             df_status = df_status.drop(columns=["attitudeEstimationState"])
-            df_status = (
-                df_status.set_index("timestamp").resample("1s").mean().reset_index()
-            )
+            df_status = df_status.set_index("timestamp").resample("1s").mean().reset_index()
 
             # Merge obstruction and status data
             merged_df = pd.merge(
@@ -172,17 +158,10 @@ class DataFeatureExtraction:
 
             # Add location data for mobile installations
             if config.MOBILE and df_location is not None:
-                df_location["timestamp"] = pd.to_datetime(
-                    df_location["timestamp"], unit="s"
-                )
+                df_location["timestamp"] = pd.to_datetime(df_location["timestamp"], unit="s")
                 # drop timezone for timestamp
                 df_location["timestamp"] = df_location["timestamp"].dt.tz_localize(None)
-                df_location = (
-                    df_location.set_index("timestamp")
-                    .resample("1s")
-                    .mean()
-                    .reset_index()
-                )
+                df_location = df_location.set_index("timestamp").resample("1s").mean().reset_index()
                 merged_df = pd.merge(
                     merged_df,
                     df_location,
@@ -231,10 +210,7 @@ class DataFeatureExtraction:
             timestamp_dt = pd.to_datetime(timestamp).tz_localize(None)
             timeslot_df = df_obstruction_merged[
                 (df_obstruction_merged["timestamp"] >= timestamp_dt)
-                & (
-                    df_obstruction_merged["timestamp"]
-                    < timestamp_dt + pd.Timedelta(seconds=15)
-                )
+                & (df_obstruction_merged["timestamp"] < timestamp_dt + pd.Timedelta(seconds=15))
             ]
 
             if timeslot_df.empty:
@@ -275,12 +251,8 @@ class DataFeatureExtraction:
             self.obstruction_map.write_parquet(filename, timeslot_df)
 
             # Get status and location data files
-            status_filename = (
-                f"{config.DATA_DIR}/grpc/{date}/GRPC_STATUS-{dt_string}.csv"
-            )
-            gps_diagnostics_filename = (
-                f"{config.DATA_DIR}/grpc/{date}/GRPC_LOCATION-{dt_string}.csv"
-            )
+            status_filename = f"{config.DATA_DIR}/grpc/{date}/GRPC_STATUS-{dt_string}.csv"
+            gps_diagnostics_filename = f"{config.DATA_DIR}/grpc/{date}/GRPC_LOCATION-{dt_string}.csv"
 
             if not os.path.exists(status_filename):
                 logger.error(f"Status file not found: {status_filename}")
@@ -297,13 +269,8 @@ class DataFeatureExtraction:
                     return
 
                 gps_diagnostics_df = pd.read_csv(gps_diagnostics_filename)
-                if not all(
-                    col in gps_diagnostics_df.columns
-                    for col in ["timestamp", "lat", "lon", "alt"]
-                ):
-                    logger.error(
-                        "Missing required columns in location file for mobile installation"
-                    )
+                if not all(col in gps_diagnostics_df.columns for col in ["timestamp", "lat", "lon", "alt"]):
+                    logger.error("Missing required columns in location file for mobile installation")
                     return
 
             # Estimate connected satellites

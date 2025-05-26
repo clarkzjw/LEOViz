@@ -1,31 +1,36 @@
+import sys
 import json
+import time
 import logging
 import subprocess
-import time
-from typing import Optional, Dict, Any, List, Tuple
-import sys
-import config
 from pathlib import Path
+from typing import Optional, Dict, Any, List, Tuple
+
 import numpy as np
-sys.path.insert(0, str(Path("./starlink-grpc-tools").resolve()))
-import starlink_grpc
+
+import config
 from data_feature_extraction import DataFeatureExtraction
 from timeslot_manager import TimeslotManager
+
+sys.path.insert(0, str(Path("./starlink-grpc-tools").resolve()))
+import starlink_grpc
+
 
 logger = logging.getLogger(__name__)
 
 GRPC_TIMEOUT = 10
 
+
 class GrpcCommand:
     """Handles GRPC command execution and response parsing for Starlink dish communication.
-    
+
     This class provides methods to interact with the Starlink dish through GRPC commands,
     including status checks, diagnostics, and obstruction map data collection.
     """
-    
+
     def __init__(self):
         """Initialize GRPC commands and data extractor.
-        
+
         Sets up the command strings for various GRPC operations and initializes
         the data extractor for processing responses.
         """
@@ -57,7 +62,7 @@ class GrpcCommand:
 
     def reset_obstruction_map(self) -> None:
         """Reset the dish's obstruction map to clear previous measurements.
-        
+
         Raises:
             Exception: If the reset command fails to execute successfully.
         """
@@ -72,13 +77,13 @@ class GrpcCommand:
 
     def execute(self, cmd: List[str]) -> Optional[Dict[str, Any]]:
         """Execute a grpcurl command and parse its JSON response.
-        
+
         Args:
             cmd: List of command arguments to execute with grpcurl.
-            
+
         Returns:
             Optional[Dict[str, Any]]: Parsed JSON response if successful, None otherwise.
-            
+
         Note:
             Command execution is limited by GRPC_TIMEOUT seconds.
         """
@@ -87,7 +92,7 @@ class GrpcCommand:
             if result.returncode != 0:
                 logger.error(f"Command failed with error: {result.stderr}")
                 return None
-            
+
             return json.loads(result.stdout)
         except subprocess.TimeoutExpired:
             logger.error(f"Command timed out after {GRPC_TIMEOUT} seconds")
@@ -101,13 +106,13 @@ class GrpcCommand:
 
     def status(self, current_time: float) -> Optional[List[Any]]:
         """Get current dish status information.
-        
+
         Args:
             current_time: Timestamp to associate with the status data.
-            
+
         Returns:
             Optional[List[Any]]: List of status fields if successful, None otherwise.
-            
+
         Note:
             Status includes signal strength, throughput, alignment, and attitude data.
         """
@@ -129,13 +134,13 @@ class GrpcCommand:
 
     def gps_diagnostics(self, current_time: float) -> Optional[List[Any]]:
         """Get GPS diagnostics data for mobile installations.
-        
+
         Args:
             current_time: Timestamp to associate with the GPS data.
-            
+
         Returns:
             Optional[List[Any]]: List of GPS fields if successful, None otherwise.
-            
+
         Note:
             This method is only active when config.MOBILE is True.
         """
@@ -157,12 +162,12 @@ class GrpcCommand:
 
     def get_obstruction_map_frame_type(self) -> Tuple[int, str]:
         """Get the reference frame type used by the obstruction map.
-        
+
         Returns:
             Tuple[int, str]: A tuple containing:
                 - int: Numeric frame type identifier
                 - str: Human-readable frame type name
-                
+
         Note:
             Frame types are:
             - 0: UNKNOWN
@@ -172,13 +177,9 @@ class GrpcCommand:
         try:
             context = starlink_grpc.ChannelContext(target=config.STARLINK_GRPC_ADDR_PORT)
             map = starlink_grpc.get_obstruction_map(context)
-            
-            frame_type = {
-                0: "UNKNOWN",
-                1: "FRAME_EARTH",
-                2: "FRAME_UT"
-            }.get(map.map_reference_frame, "UNKNOWN")
-            
+
+            frame_type = {0: "UNKNOWN", 1: "FRAME_EARTH", 2: "FRAME_UT"}.get(map.map_reference_frame, "UNKNOWN")
+
             return map.map_reference_frame, frame_type
         except Exception as e:
             logger.error(f"Error getting obstruction map frame type: {str(e)}")
@@ -186,12 +187,12 @@ class GrpcCommand:
 
     def get_obstruction_data(self) -> Optional[Tuple[float, np.ndarray]]:
         """Get a single obstruction map data point from the dish.
-        
+
         Returns:
             Optional[Tuple[float, np.ndarray]]: A tuple containing:
                 - float: Timestamp of the measurement
                 - np.ndarray: Flattened obstruction map data
-                
+
         Note:
             The obstruction map is a binary array where:
             - 0: No obstruction
@@ -214,7 +215,7 @@ class GrpcCommand:
         try:
             # Create GRPC context
             context = starlink_grpc.ChannelContext(target=config.STARLINK_GRPC_ADDR_PORT)
-            
+
             obstruction_data_array = []
             timestamp_array = []
 

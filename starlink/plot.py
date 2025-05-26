@@ -1,12 +1,12 @@
-# flake8: noqa: E501
 import os
 import argparse
 import subprocess
+
 from copy import deepcopy
+from typing import List
 from pathlib import Path
 from datetime import datetime
 from multiprocessing import Pool
-from typing import List, Any
 
 import pandas as pd
 import cartopy
@@ -18,11 +18,11 @@ from matplotlib import dates as mdates
 from matplotlib import gridspec
 from skyfield.api import load
 
-cartopy.config["data_dir"] = os.getenv("CARTOPY_DIR", cartopy.config.get("data_dir"))
-
 from util import load_ping, load_tle_from_file, load_connected_satellites
 from pop import get_pop_data, get_home_pop
-from pprint import pprint
+
+cartopy.config["data_dir"] = os.getenv("CARTOPY_DIR", cartopy.config.get("data_dir"))
+
 
 POP_DATA = None
 HOME_POP = None
@@ -111,27 +111,19 @@ def plot_once(
     elif frame_type_int == 2:
         FRAME_TYPE = "FRAME_UT"
 
-    currentObstructionMap = get_obstruction_map_by_timestamp(
-        df_obstruction_map, timestamp_str
-    )
+    currentObstructionMap = get_obstruction_map_by_timestamp(df_obstruction_map, timestamp_str)
     axObstructionMapInstantaneous.imshow(
         currentObstructionMap,
         cmap="gray",
     )
-    axObstructionMapInstantaneous.set_title(
-        f"Instantaneous satellite trajectory from gRPC"
-    )
+    axObstructionMapInstantaneous.set_title("Instantaneous satellite trajectory from gRPC")
 
-    cumulativeObstructionMap = get_obstruction_map_by_timestamp(
-        df_cumulative_obstruction_map, timestamp_str
-    )
+    cumulativeObstructionMap = get_obstruction_map_by_timestamp(df_cumulative_obstruction_map, timestamp_str)
     axObstructionMapCumulative.imshow(
         cumulativeObstructionMap,
         cmap="gray",
     )
-    axObstructionMapCumulative.set_title(
-        f"Cumulative obstruction map, frame type: {FRAME_TYPE}"
-    )
+    axObstructionMapCumulative.set_title(f"Cumulative obstruction map, frame type: {FRAME_TYPE}")
 
     axSat.set_extent(
         [
@@ -173,9 +165,7 @@ def plot_once(
             marker="x",
         )
 
-        for lon, lat, name in zip(
-            POP_DATA["lons"], POP_DATA["lats"], POP_DATA["names"]
-        ):
+        for lon, lat, name in zip(POP_DATA["lons"], POP_DATA["lats"], POP_DATA["names"]):
             if name == "sttlwax9":
                 continue
             color = "green"
@@ -228,10 +218,8 @@ def plot_once(
             linestyle="--",
         )
 
-    all_satellites_in_canvas, connected_sat_lat, connected_sat_lon = (
-        get_connected_satellite_lat_lon(
-            timestamp_str, connected_sat_name, all_satellites
-        )
+    all_satellites_in_canvas, connected_sat_lat, connected_sat_lon = get_connected_satellite_lat_lon(
+        timestamp_str, connected_sat_name, all_satellites
     )
     axSat.scatter(
         connected_sat_lon,
@@ -269,9 +257,7 @@ def plot_once(
             s=30,
         )
 
-    axSat.set_title(
-        f"Timestamp: {timestamp_str}, Connected satellite: {connected_sat_name}, {connected_sat_gen}"
-    )
+    axSat.set_title(f"Timestamp: {timestamp_str}, Connected satellite: {connected_sat_name}, {connected_sat_gen}")
 
     axSat.legend(loc="upper left")
 
@@ -290,9 +276,7 @@ def plot_once(
     zoom_end = plot_current + pd.Timedelta(minutes=1)
 
     if not df_rtt.empty:
-        df_rtt_zoomed = df_rtt[
-            (df_rtt["timestamp"] >= zoom_start) & (df_rtt["timestamp"] <= zoom_end)
-        ]
+        df_rtt_zoomed = df_rtt[(df_rtt["timestamp"] >= zoom_start) & (df_rtt["timestamp"] <= zoom_end)]
         axRTT.plot(
             df_rtt_zoomed["timestamp"],
             df_rtt_zoomed["rtt"],
@@ -313,9 +297,7 @@ def plot_once(
         axRTT.set_xticklabels([])
 
     if not df_sinr.empty:
-        df_sinr_zoomed = df_sinr[
-            (df_sinr["timestamp"] >= zoom_start) & (df_sinr["timestamp"] <= zoom_end)
-        ]
+        df_sinr_zoomed = df_sinr[(df_sinr["timestamp"] >= zoom_start) & (df_sinr["timestamp"] <= zoom_end)]
 
         axSINR.plot(
             df_sinr_zoomed["timestamp"],
@@ -350,8 +332,7 @@ def cumulative_obstruction_map(df_obstruction_map: pd.DataFrame):
 
         for index in range(1, len(df_obstruction_map)):
             current_cumulative = (
-                current_cumulative.astype(bool)
-                | df_obstruction_map.iloc[index]["obstruction_map"].astype(bool)
+                current_cumulative.astype(bool) | df_obstruction_map.iloc[index]["obstruction_map"].astype(bool)
             ).astype(int)
             df_cumulative.at[index, "obstruction_map"] = deepcopy(current_cumulative)
 
@@ -379,18 +360,14 @@ def plot():
     df_sinr = pd.read_csv(SINR_DATA)
     df_rtt = load_ping(LATENCY_DATA)
     all_satellites = load_tle_from_file(TLE_DATA)
-    connected_satellites = load_connected_satellites(
-        f"{DATA_DIR}/serving_satellite_data-{DATE_TIME}.csv"
-    )
+    connected_satellites = load_connected_satellites(f"{DATA_DIR}/serving_satellite_data-{DATE_TIME}.csv")
 
     if not df_rtt.empty:
         df_rtt["timestamp"] = pd.to_datetime(df_rtt["timestamp"], unit="s", utc=True)
     if not df_sinr.empty:
         df_sinr["timestamp"] = pd.to_datetime(df_sinr["timestamp"], unit="s", utc=True)
     if not df_obstruction_map.empty:
-        df_obstruction_map["timestamp"] = pd.to_datetime(
-            df_obstruction_map["timestamp"], unit="s", utc=True
-        )
+        df_obstruction_map["timestamp"] = pd.to_datetime(df_obstruction_map["timestamp"], unit="s", utc=True)
         df_cumulative_obstruction_map = cumulative_obstruction_map(df_obstruction_map)
 
     HOME_POP = get_home_pop()
@@ -457,9 +434,7 @@ def get_connected_satellite_lat_lon(timestamp_str, sat_name, all_satellites):
                 and subsat.longitude.degrees < centralLon + offsetLon
             ):
 
-                all_satellites_in_canvas.append(
-                    (subsat.latitude.degrees, subsat.longitude.degrees, sat.name)
-                )
+                all_satellites_in_canvas.append((subsat.latitude.degrees, subsat.longitude.degrees, sat.name))
     return (
         all_satellites_in_canvas,
         connected_sat_lat,
@@ -473,9 +448,14 @@ def create_video(fps, filename):
     print(f"Video created: {filename}.mp4")
 
 
-def plot_data(df_obstruction_map: pd.DataFrame, df_rtt: pd.DataFrame,
-             df_status: pd.DataFrame, df_location: pd.DataFrame,
-             all_satellites: List[str], timestamp_str: str) -> None:
+def plot_data(
+    df_obstruction_map: pd.DataFrame,
+    df_rtt: pd.DataFrame,
+    df_status: pd.DataFrame,
+    df_location: pd.DataFrame,
+    all_satellites: List[str],
+    timestamp_str: str,
+) -> None:
     """Plot data for a specific timestamp."""
     try:
         # Create figure with subplots
@@ -552,9 +532,7 @@ def plot_data(df_obstruction_map: pd.DataFrame, df_rtt: pd.DataFrame,
         # Zoomed RTT
         axRTT = fig.add_subplot(gs01[3, 0])
         if not df_rtt.empty:
-            df_rtt_zoomed = df_rtt[
-                (df_rtt["timestamp"] >= zoom_start) & (df_rtt["timestamp"] <= zoom_end)
-            ]
+            df_rtt_zoomed = df_rtt[(df_rtt["timestamp"] >= zoom_start) & (df_rtt["timestamp"] <= zoom_end)]
             axRTT.plot(
                 df_rtt_zoomed["timestamp"],
                 df_rtt_zoomed["rtt"],
@@ -574,9 +552,7 @@ def plot_data(df_obstruction_map: pd.DataFrame, df_rtt: pd.DataFrame,
         # Zoomed SINR
         axSINR = fig.add_subplot(gs01[3, 1], sharex=axRTT)
         if not df_status.empty:
-            df_status_zoomed = df_status[
-                (df_status["timestamp"] >= zoom_start) & (df_status["timestamp"] <= zoom_end)
-            ]
+            df_status_zoomed = df_status[(df_status["timestamp"] >= zoom_start) & (df_status["timestamp"] <= zoom_end)]
             axSINR.plot(
                 df_status_zoomed["timestamp"],
                 df_status_zoomed["sinr"],
@@ -599,6 +575,7 @@ def plot_data(df_obstruction_map: pd.DataFrame, df_rtt: pd.DataFrame,
     except Exception as e:
         logger.error(f"Error plotting data: {str(e)}", exc_info=True)
 
+
 def main() -> None:
     """Main function to plot data."""
     try:
@@ -616,11 +593,11 @@ def main() -> None:
 
         # Convert timestamps
         if not df_status.empty:
-            df_status["timestamp"] = pd.to_datetime(df_status["timestamp"], unit='s', utc=True)
+            df_status["timestamp"] = pd.to_datetime(df_status["timestamp"], unit="s", utc=True)
         if not df_location.empty:
             df_location["utc_time"] = pd.to_datetime(df_location["utc_time"], utc=True)
         if not df_rtt.empty:
-            df_rtt["timestamp"] = pd.to_datetime(df_rtt["timestamp"], unit='s', utc=True)
+            df_rtt["timestamp"] = pd.to_datetime(df_rtt["timestamp"], unit="s", utc=True)
 
         # Get all satellites
         all_satellites = df_obstruction_map["satellite"].unique().tolist()
@@ -628,7 +605,14 @@ def main() -> None:
         # Plot data for each timestamp
         for _, row in df_obstruction_map.iterrows():
             timestamp_str = row["Timestamp"]
-            plot_data(df_obstruction_map, df_rtt, df_status, df_location, all_satellites, timestamp_str)
+            plot_data(
+                df_obstruction_map,
+                df_rtt,
+                df_status,
+                df_location,
+                all_satellites,
+                timestamp_str,
+            )
 
     except Exception as e:
         logger.error(f"Error in main: {str(e)}", exc_info=True)
@@ -651,25 +635,19 @@ if __name__ == "__main__":
     )
     parser.add_argument("--lat", type=float, required=True, help="Dish latitude")
     parser.add_argument("--lon", type=float, required=True, help="Dish longitude")
-    parser.add_argument(
-        "--fps", type=int, default=5, help="FPS for the generated video"
-    )
+    parser.add_argument("--fps", type=int, default=5, help="FPS for the generated video")
     args = parser.parse_args()
 
     if args.lat and args.lon:
         centralLat = args.lat
         centralLon = args.lon
-        projStereographic = ccrs.Stereographic(
-            central_longitude=centralLon, central_latitude=centralLat
-        )
+        projStereographic = ccrs.Stereographic(central_longitude=centralLon, central_latitude=centralLat)
 
     DATA_DIR = args.dir
     DATE_TIME = args.id
     DATE = "-".join(args.id.split("-")[:3])
 
-    OBSTRUCTION_MAP_DATA = Path(DATA_DIR).joinpath(
-        f"grpc/{DATE}/obstruction_map-{DATE_TIME}.parquet"
-    )
+    OBSTRUCTION_MAP_DATA = Path(DATA_DIR).joinpath(f"grpc/{DATE}/obstruction_map-{DATE_TIME}.parquet")
     SINR_DATA = Path(DATA_DIR).joinpath(f"grpc/{DATE}/GRPC_STATUS-{DATE_TIME}.csv")
     LATENCY_DATA = Path(DATA_DIR).joinpath(f"latency/{DATE}/ping-10ms-{DATE_TIME}.txt")
     TLE_DATA = Path(DATA_DIR).joinpath(f"TLE/{DATE}/starlink-tle-{DATE_TIME}.txt")

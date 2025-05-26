@@ -1,5 +1,3 @@
-# flake8: noqa: E501
-
 import re
 import httpx
 import subprocess
@@ -16,20 +14,10 @@ def get_pop_data(centralLat, centralLon, offsetLat, offsetLon):
         lons = []
         names = []
         for pop in data:
-            if (
-                pop.get("show") == True
-                and pop.get("code") != ""
-                and pop.get("type") == "netfac"
-            ):
-                if (
-                    float(pop.get("lat")) < centralLat - offsetLat
-                    or float(pop.get("lat")) > centralLat + offsetLat
-                ):
+            if pop.get("show") is True and pop.get("code") != "" and pop.get("type") == "netfac":
+                if float(pop.get("lat")) < centralLat - offsetLat or float(pop.get("lat")) > centralLat + offsetLat:
                     continue
-                if (
-                    float(pop.get("lon")) < centralLon - offsetLon
-                    or float(pop.get("lon")) > centralLon + offsetLon
-                ):
+                if float(pop.get("lon")) < centralLon - offsetLon or float(pop.get("lon")) > centralLon + offsetLon:
                     continue
                 lats.append(pop.get("lat"))
                 lons.append(pop.get("lon"))
@@ -62,9 +50,7 @@ def get_home_pop():
                 if match:
                     return match.group(1)
                 else:
-                    print(
-                        f"{hostname} does not match customer.<pop>.pop.starlinkisp.net. format"
-                    )
+                    print(f"{hostname} does not match customer.<pop>.pop.starlinkisp.net. format")
                     return ""
             except subprocess.CalledProcessError as e:
                 print(f"An error occurred while dig DNS PTR record for {ip}: {e}")

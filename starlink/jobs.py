@@ -1,26 +1,24 @@
-# flake8: noqa: E501
-
-import os
 import csv
 import sys
 import time
 import logging
 import threading
-from datetime import datetime, timezone, timedelta
-from pathlib import Path
-from typing import Optional, List, Dict, Any, Tuple
 
-import numpy as np
+from typing import Optional, List, Dict, Any
+from pathlib import Path
+from datetime import datetime, timezone, timedelta
+
 import pandas as pd
 
 import config
-from config import DATA_DIR, STARLINK_GRPC_ADDR_PORT, DURATION_SECONDS, TLE_DATA_DIR
+
 from util import date_time_string, ensure_data_directory
+from config import DATA_DIR, DURATION_SECONDS
 from obstruction import ObstructionMap
-from data_feature_extraction import DataFeatureExtraction
-from satellite_matching_estimation import SatelliteProcessor
 from grpc_command import GrpcCommand
 from timeslot_manager import TimeslotManager
+from data_feature_extraction import DataFeatureExtraction
+
 
 # Add starlink-grpc-tools to Python path
 sys.path.insert(0, str(Path("./starlink-grpc-tools").resolve()))
@@ -137,13 +135,9 @@ class JobManager:
                 logger.info(f"Location data saved to {gps_diagnostics}")
 
             except Exception as e:
-                logger.error(
-                    f"Error monitoring GPS diagnostics: {str(e)}", exc_info=True
-                )
+                logger.error(f"Error monitoring GPS diagnostics: {str(e)}", exc_info=True)
 
-    def _collect_timeslot_data(
-        self, timeslot_start: float
-    ) -> Optional[Dict[str, List[Any]]]:
+    def _collect_timeslot_data(self, timeslot_start: float) -> Optional[Dict[str, List[Any]]]:
         """Collect obstruction data for a single timeslot.
 
         Args:
@@ -201,12 +195,8 @@ class JobManager:
         logger.info(f"{name}, {threading.current_thread()}")
 
         # Validate location requirements for static installation
-        if not config.MOBILE and not all(
-            [config.LATITUDE, config.LONGITUDE, config.ALTITUDE]
-        ):
-            logger.error(
-                "Static installation requires LATITUDE, LONGITUDE, and ALTITUDE in config"
-            )
+        if not config.MOBILE and not all([config.LATITUDE, config.LONGITUDE, config.ALTITUDE]):
+            logger.error("Static installation requires LATITUDE, LONGITUDE, and ALTITUDE in config")
             return
 
         # Generate filenames with current timestamp
@@ -240,9 +230,7 @@ class JobManager:
                             start_time = now.replace(microsecond=0).replace(second=57)
                             last_timeslot_second = 57
                         elif now.second >= 57 and now.second < 60:
-                            start_time = now.replace(microsecond=0).replace(
-                                second=12
-                            ) + timedelta(minutes=1)
+                            start_time = now.replace(microsecond=0).replace(second=12) + timedelta(minutes=1)
                             last_timeslot_second = 12
                         elif now.second >= 0 and now.second < 12:
                             start_time = now.replace(microsecond=0).replace(second=12)
@@ -251,9 +239,7 @@ class JobManager:
                         while datetime.now(timezone.utc) < start_time:
                             time.sleep(0.1)
                     else:
-                        last_timeslot_second = TimeslotManager.wait_until_target_time(
-                            last_timeslot_second
-                        )
+                        last_timeslot_second = TimeslotManager.wait_until_target_time(last_timeslot_second)
 
                     # Reset obstruction map for new data collection
                     self.grpc.reset_obstruction_map()

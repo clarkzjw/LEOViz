@@ -1,5 +1,3 @@
-# flake8: noqa: E501
-
 from pprint import pprint
 
 import httpx

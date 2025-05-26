@@ -1,11 +1,14 @@
-import csv
-import logging
-from datetime import datetime
-from typing import List, Tuple, Optional
-import pandas as pd
-import numpy as np
 import os
 import cv2
+import csv
+import logging
+
+from datetime import datetime
+from typing import List, Tuple, Optional
+
+import pandas as pd
+import numpy as np
+
 from config import DATA_DIR
 from timeslot_manager import TimeslotManager
 
@@ -36,9 +39,7 @@ class ObstructionMap:
         self.map_size = 123  # Size of the obstruction map (123x123)
 
     # TODO: not used?
-    def process_data(
-        self, df_obstruction_map: pd.DataFrame
-    ) -> List[Tuple[datetime, float, float]]:
+    def process_data(self, df_obstruction_map: pd.DataFrame) -> List[Tuple[datetime, float, float]]:
         """Process obstruction data and return list of timestamps and angles.
 
         Args:
@@ -67,9 +68,7 @@ class ObstructionMap:
             return []
 
     # TODO: not used?
-    def get_time_range(
-        self, df_obstruction_map: pd.DataFrame
-    ) -> Tuple[datetime, datetime]:
+    def get_time_range(self, df_obstruction_map: pd.DataFrame) -> Tuple[datetime, datetime]:
         """Get start and end times from obstruction map data.
 
         Args:
@@ -85,21 +84,15 @@ class ObstructionMap:
             Returns (None, None) if time range cannot be determined.
         """
         try:
-            start_time = pd.to_datetime(
-                df_obstruction_map.iloc[0]["timestamp"], unit="s"
-            )
-            end_time = pd.to_datetime(
-                df_obstruction_map.iloc[-1]["timestamp"], unit="s"
-            )
+            start_time = pd.to_datetime(df_obstruction_map.iloc[0]["timestamp"], unit="s")
+            end_time = pd.to_datetime(df_obstruction_map.iloc[-1]["timestamp"], unit="s")
             return start_time, end_time
         except Exception as e:
             logger.error(f"Error getting time range: {str(e)}", exc_info=True)
             return None, None
 
     # TODO: not used?
-    def calculate_angles(
-        self, df_obstruction_map: pd.DataFrame
-    ) -> Optional[pd.DataFrame]:
+    def calculate_angles(self, df_obstruction_map: pd.DataFrame) -> Optional[pd.DataFrame]:
         """Calculate obstruction angles from obstruction map data.
 
         Args:
@@ -115,21 +108,15 @@ class ObstructionMap:
         """
         try:
             # Convert timestamps
-            df_obstruction_map["timestamp"] = pd.to_datetime(
-                df_obstruction_map["timestamp"], unit="s"
-            )
+            df_obstruction_map["timestamp"] = pd.to_datetime(df_obstruction_map["timestamp"], unit="s")
 
             # Calculate angles
-            df_obstruction_map["angle"] = np.arctan2(
-                df_obstruction_map["elevation"], df_obstruction_map["azimuth"]
-            )
+            df_obstruction_map["angle"] = np.arctan2(df_obstruction_map["elevation"], df_obstruction_map["azimuth"])
 
             return df_obstruction_map
 
         except Exception as e:
-            logger.error(
-                f"Error calculating obstruction angles: {str(e)}", exc_info=True
-            )
+            logger.error(f"Error calculating obstruction angles: {str(e)}", exc_info=True)
             return None
 
     def process_timeslot(self, timeslot_df: pd.DataFrame, writer: csv.writer) -> None:
@@ -145,17 +132,13 @@ class ObstructionMap:
             - Writes timestamp and coordinates of changes to CSV
         """
         previous_obstruction_map = timeslot_df.iloc[0]["obstruction_map"]
-        previous_obstruction_map = previous_obstruction_map.reshape(
-            self.map_size, self.map_size
-        )
+        previous_obstruction_map = previous_obstruction_map.reshape(self.map_size, self.map_size)
 
         hold_coord = None
         white_pixel_coords = []
         for _, row in timeslot_df.iterrows():
             timestamp_dt = pd.to_datetime(row["timestamp"], unit="s")
-            obstruction_map = row["obstruction_map"].reshape(
-                self.map_size, self.map_size
-            )
+            obstruction_map = row["obstruction_map"].reshape(self.map_size, self.map_size)
             xor_map = np.bitwise_xor(previous_obstruction_map, obstruction_map)
             coords = np.argwhere(xor_map == 1)
 
@@ -192,9 +175,7 @@ class ObstructionMap:
             - Creates CSV file with obstruction data
             - Handles timezone-aware timestamps
         """
-        start_time_dt = pd.to_datetime(
-            df_obstruction_map.iloc[0]["timestamp"], unit="s"
-        )
+        start_time_dt = pd.to_datetime(df_obstruction_map.iloc[0]["timestamp"], unit="s")
         end_time_dt = pd.to_datetime(df_obstruction_map.iloc[-1]["timestamp"], unit="s")
 
         with open(
@@ -210,17 +191,12 @@ class ObstructionMap:
                 _, timeslot_endtime_dt = TimeslotManager.get_next_timeslot()
 
                 # Adjust timeslot end time to match our data's timezone
-                timeslot_endtime_dt = timeslot_endtime_dt.replace(
-                    tzinfo=current_time.tzinfo
-                )
+                timeslot_endtime_dt = timeslot_endtime_dt.replace(tzinfo=current_time.tzinfo)
 
                 # Get data for current timeslot
                 timeslot_df = df_obstruction_map[
                     (df_obstruction_map["timestamp"] >= current_time.timestamp())
-                    & (
-                        df_obstruction_map["timestamp"]
-                        < timeslot_endtime_dt.timestamp()
-                    )
+                    & (df_obstruction_map["timestamp"] < timeslot_endtime_dt.timestamp())
                 ]
 
                 if len(timeslot_df) == 0:
@@ -253,9 +229,7 @@ class ObstructionMap:
         )
 
         for _, row in df.iterrows():
-            obstruction_map = row["obstruction_map"].reshape(
-                self.map_size, self.map_size
-            )
+            obstruction_map = row["obstruction_map"].reshape(self.map_size, self.map_size)
             image_data = (obstruction_map * 255).astype(np.uint8)
             image_data_bgr = cv2.cvtColor(image_data, cv2.COLOR_GRAY2BGR)
             out.write(image_data_bgr)

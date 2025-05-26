@@ -1,17 +1,20 @@
 import os
 import logging
-from datetime import datetime, timedelta, timezone
+
 from typing import List, Tuple, Any, Optional
+from datetime import datetime, timedelta, timezone
+
 
 import pandas as pd
 import numpy as np
-from skyfield.api import load, utc
+from skyfield.api import load
 
 import config
 from location_provider import LocationProvider
 from data_feature_extraction import DataFeatureExtraction
 
 logger = logging.getLogger(__name__)
+
 
 class SatelliteProcessor:
     """Handles satellite estimation, matching, and distance calculations.
@@ -31,8 +34,9 @@ class SatelliteProcessor:
         self.data_extracter = DataFeatureExtraction()
         self.location_provider = LocationProvider()
 
-    def estimate_connected_satellites(self, uuid: str, date: str, frame_type: int, df_status: pd.DataFrame,
-                                    start_time: float, end_time: float) -> Optional[pd.DataFrame]:
+    def estimate_connected_satellites(
+        self, uuid: str, date: str, frame_type: int, df_status: pd.DataFrame, start_time: float, end_time: float
+    ) -> Optional[pd.DataFrame]:
         """Estimate connected satellites for a given time range.
 
         Args:
@@ -69,7 +73,7 @@ class SatelliteProcessor:
 
                 logger.info(f"Reading location file: {location_filename}")
                 df_location = pd.read_csv(location_filename)
-                df_location['timestamp'] = pd.to_datetime(df_location['timestamp'], unit='s', utc=True)
+                df_location["timestamp"] = pd.to_datetime(df_location["timestamp"], unit="s", utc=True)
 
             # Get obstruction data file
             obstruction_file = f"obstruction-data-{uuid}.csv"
@@ -84,10 +88,7 @@ class SatelliteProcessor:
             # Merge obstruction data with status and location data
             logger.info("Merging obstruction data with status and location data")
             merged_df = self.data_extracter.merge_obstruction_with_status_and_location(
-                filename,
-                frame_type,
-                df_status,
-                df_location if config.MOBILE else None
+                filename, frame_type, df_status, df_location if config.MOBILE else None
             )
             if merged_df.empty:
                 logger.error("Failed to merge data")
@@ -108,12 +109,23 @@ class SatelliteProcessor:
 
             # Process data in intervals
             result_df = self.process_intervals(
-                filename, start_ts.year, start_ts.month, start_ts.day,
-                start_ts.hour, start_ts.minute, start_ts.second,
-                end_ts.year, end_ts.month, end_ts.day,
-                end_ts.hour, end_ts.minute, end_ts.second,
-                merged_data_file, satellites, frame_type,
-                df_location if config.MOBILE else None
+                filename,
+                start_ts.year,
+                start_ts.month,
+                start_ts.day,
+                start_ts.hour,
+                start_ts.minute,
+                start_ts.second,
+                end_ts.year,
+                end_ts.month,
+                end_ts.day,
+                end_ts.hour,
+                end_ts.minute,
+                end_ts.second,
+                merged_data_file,
+                satellites,
+                frame_type,
+                df_location if config.MOBILE else None,
             )
 
             if result_df is None or result_df.empty:
@@ -128,7 +140,7 @@ class SatelliteProcessor:
             file_exists = os.path.exists(serving_satellite_file)
 
             # Append to the file
-            result_df.to_csv(serving_satellite_file, mode='a', header=not file_exists, index=False)
+            result_df.to_csv(serving_satellite_file, mode="a", header=not file_exists, index=False)
             logger.info(f"Satellite estimation complete for {start_ts} to {end_ts}")
 
             return result_df
@@ -137,9 +149,13 @@ class SatelliteProcessor:
             logger.error(f"Error estimating connected satellites: {str(e)}", exc_info=True)
             return None
 
-    def find_matching_satellites(self, satellites: List[Any], observer_location: Any,
-                               observed_positions_with_timestamps: List[Tuple[datetime, Tuple[float, float]]],
-                               frame_type: int) -> List[str]:
+    def find_matching_satellites(
+        self,
+        satellites: List[Any],
+        observer_location: Any,
+        observed_positions_with_timestamps: List[Tuple[datetime, Tuple[float, float]]],
+        frame_type: int,
+    ) -> List[str]:
         """Find matching satellites based on observed positions.
 
         Args:
@@ -187,13 +203,11 @@ class SatelliteProcessor:
             if valid_positions:
                 if frame_type == 1:  # FRAME_EARTH
                     total_difference = self.calculate_total_difference(
-                        [(90 - data[0], data[1]) for _, data in observed_positions_with_timestamps],
-                        satellite_positions
+                        [(90 - data[0], data[1]) for _, data in observed_positions_with_timestamps], satellite_positions
                     )
                 elif frame_type == 2:  # FRAME_UT
                     total_difference = self.calculate_trajectory_distance_frame_ut(
-                        [(90 - data[0], data[1]) for _, data in observed_positions_with_timestamps],
-                        satellite_positions
+                        [(90 - data[0], data[1]) for _, data in observed_positions_with_timestamps], satellite_positions
                     )
 
                 if total_difference < closest_total_difference:
@@ -202,8 +216,9 @@ class SatelliteProcessor:
 
         return [best_match] if best_match else []
 
-    def calculate_distance_for_best_match(self, satellite: Any, observer_location: Any,
-                                        start_time: datetime, interval_seconds: int) -> List[float]:
+    def calculate_distance_for_best_match(
+        self, satellite: Any, observer_location: Any, start_time: datetime, interval_seconds: int
+    ) -> List[float]:
         """Calculate distances for the best matching satellite.
 
         Args:
@@ -237,10 +252,8 @@ class SatelliteProcessor:
         merged_data_file: str,
         satellites: List[Any],
         frame_type: int,
-        df_gps_diagnostics: Optional[pd.DataFrame] = None
-    ) -> Tuple[Optional[List[Tuple[datetime, Tuple[float, float]]]],
-              Optional[List[str]],
-              Optional[List[float]]]:
+        df_gps_diagnostics: Optional[pd.DataFrame] = None,
+    ) -> Tuple[Optional[List[Tuple[datetime, Tuple[float, float]]]], Optional[List[str]], Optional[List[float]]]:
         """Process a single time interval for satellite matching.
 
         Args:
@@ -283,12 +296,8 @@ class SatelliteProcessor:
             return observed_positions_with_timestamps, [], []
 
         # Calculate distances for the best match
-        best_match_satellite = next(
-            sat for sat in satellites if sat.name == matching_satellites[0]
-        )
-        distances = self.calculate_distance_for_best_match(
-            best_match_satellite, observer_location, initial_time, 14
-        )
+        best_match_satellite = next(sat for sat in satellites if sat.name == matching_satellites[0])
+        distances = self.calculate_distance_for_best_match(best_match_satellite, observer_location, initial_time, 14)
 
         return observed_positions_with_timestamps, matching_satellites, distances
 
@@ -310,7 +319,7 @@ class SatelliteProcessor:
         merged_data_file: str,
         satellites: List[Any],
         frame_type: int,
-        df_gps_diagnostics: Optional[pd.DataFrame] = None
+        df_gps_diagnostics: Optional[pd.DataFrame] = None,
     ) -> Optional[pd.DataFrame]:
         """Process data in intervals and find matching satellites.
 
@@ -335,7 +344,9 @@ class SatelliteProcessor:
         """
         try:
             # Create datetime objects for start and end times
-            start_time = datetime(start_year, start_month, start_day, start_hour, start_minute, start_second, tzinfo=timezone.utc)
+            start_time = datetime(
+                start_year, start_month, start_day, start_hour, start_minute, start_second, tzinfo=timezone.utc
+            )
             end_time = datetime(end_year, end_month, end_day, end_hour, end_minute, end_second, tzinfo=timezone.utc)
 
             results = []
@@ -355,17 +366,19 @@ class SatelliteProcessor:
                     merged_data_file,
                     satellites,
                     frame_type,
-                    df_gps_diagnostics
+                    df_gps_diagnostics,
                 )
 
                 if matching_satellites:
                     for second in range(15):
                         if second < len(distances):
-                            results.append({
-                                'Timestamp': current_time + timedelta(seconds=second),
-                                'Connected_Satellite': matching_satellites[0],
-                                'Distance': distances[second]
-                            })
+                            results.append(
+                                {
+                                    "Timestamp": current_time + timedelta(seconds=second),
+                                    "Connected_Satellite": matching_satellites[0],
+                                    "Distance": distances[second],
+                                }
+                            )
 
                 current_time += timedelta(seconds=15)
 
@@ -416,9 +429,7 @@ class SatelliteProcessor:
         if az_diff > 180:
             az_diff = 360 - az_diff
         az_diff = np.radians(az_diff)
-        separation = np.arccos(
-            np.sin(alt1) * np.sin(alt2) + np.cos(alt1) * np.cos(alt2) * np.cos(az_diff)
-        )
+        separation = np.arccos(np.sin(alt1) * np.sin(alt2) + np.cos(alt1) * np.cos(alt2) * np.cos(az_diff))
         return np.degrees(separation)
 
     def calculate_bearing(self, alt1, az1, alt2, az2):
@@ -495,10 +506,10 @@ class SatelliteProcessor:
         sat_dir_vector = self.calculate_direction_vector(satellite_positions[0], satellite_positions[-1])
 
         # Calculate direction difference
-        direction_diff = np.sqrt(
-            (obs_dir_vector[0] - sat_dir_vector[0]) ** 2 +
-            (obs_dir_vector[1] - sat_dir_vector[1]) ** 2
-        ) / direction_range
+        direction_diff = (
+            np.sqrt((obs_dir_vector[0] - sat_dir_vector[0]) ** 2 + (obs_dir_vector[1] - sat_dir_vector[1]) ** 2)
+            / direction_range
+        )
 
         # Add the direction difference to the distance measure
         total_distance = distance + direction_diff

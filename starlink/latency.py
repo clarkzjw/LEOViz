@@ -1,5 +1,3 @@
-# flake8: noqa: E501
-
 import logging
 import subprocess
 import threading
@@ -7,7 +5,6 @@ import threading
 from config import (
     INTERVAL_MS,
     INTERVAL_SEC,
-    DURATION,
     DURATION_SECONDS,
     IFCE,
     COUNT,
@@ -25,7 +22,7 @@ def icmp_ping() -> None:
 
     FILENAME = "{}/{}/ping-{}-{}.txt".format(
         LATENCY_DATA_DIR,
-        ensure_data_directory(LATENCY_DATA_DIR),
+        ensure_data_directory(str(LATENCY_DATA_DIR)),
         INTERVAL_MS,
         date_time_string(),
     )
