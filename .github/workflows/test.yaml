@@ -33,7 +33,7 @@ jobs:
           context: .
           file: Dockerfile-starlink
           load: true
-          tags: ${{ secrets.DOCKER_USERNAME }}/leoviz:starlink
+          tags: leoviz:starlink
 
       - name: Test
         working-directory: ./tests
