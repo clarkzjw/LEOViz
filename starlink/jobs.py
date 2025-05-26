@@ -196,7 +196,7 @@ class JobManager:
 
         # Validate location requirements for static installation
         if not config.MOBILE and not all([config.LATITUDE, config.LONGITUDE, config.ALTITUDE]):
-            logger.error("Static installation requires LATITUDE, LONGITUDE, and ALTITUDE in config")
+            logger.error("Stationary installation requires LATITUDE, LONGITUDE, and ALTITUDE in config")
             return
 
         # Generate filenames with current timestamp

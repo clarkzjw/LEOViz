@@ -94,6 +94,10 @@ class SatelliteProcessor:
                 logger.error("Failed to merge data")
                 return None
 
+            # Pre-process observed data by frame type to get the Elevation and Azimuth angle for connected satellites
+            # from the trajectory in the obstruction map
+            merged_df = self.data_extracter.pre_process_observed_data_by_frame_type(merged_df, frame_type)
+
             # Save the merged data
             logger.info(f"Saving merged data to {merged_data_file}")
             merged_df.to_csv(merged_data_file, index=False)

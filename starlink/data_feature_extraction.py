@@ -6,6 +6,7 @@ import logging
 from typing import List, Tuple, Optional, Dict, Any
 from datetime import datetime
 
+import numpy as np
 import pandas as pd
 
 import config
@@ -110,6 +111,46 @@ class DataFeatureExtraction:
             location.get("uncertaintyMeters", 0),
         ]
 
+    def pre_process_observed_data_by_frame_type(
+        self,
+        merged_df: pd.DataFrame,
+        frame_type: int,
+    ) -> pd.DataFrame:
+        """
+        Pre-process observed data by frame type to get the Elevation and Azimuth angle for connected satellites
+        from the trajectory in the obstruction map
+        """
+        pixel_to_degrees = 80 / 62  # Conversion factor from pixel to degrees
+
+        elevations = []
+        azimuths = []
+
+        for index, row in merged_df.iterrows():
+            if frame_type == 1:  # FRAME_EARTH
+                observer_x, observer_y = 62, 62  # Assume this is the observer's pixel location
+                dx, dy = row["X"] - observer_x, (123 - row["Y"]) - observer_y
+            elif frame_type == 2:  # FRAME_UT
+                _tilt = row["tiltAngleDeg"]
+                _rotation_az = row["boresightAzimuthDeg"]
+                observer_x, observer_y = 62, 62 - (_tilt / (80 / 62))
+                dx, dy = row["X"] - observer_x, row["Y"] - observer_y
+
+            radius = np.sqrt(dx**2 + dy**2) * pixel_to_degrees
+            azimuth = np.degrees(np.arctan2(dx, dy))
+
+            if frame_type == 1:  # FRAME_EARTH
+                azimuth = (azimuth + 360) % 360
+            elif frame_type == 2:  # FRAME_UT
+                azimuth = (azimuth + _rotation_az + 360) % 360
+            # Normalize the azimuth to ensure it's within 0 to 360 degrees
+            elevation = 90 - radius
+            elevations.append(elevation)
+            azimuths.append(azimuth)
+
+        merged_df["Elevation"] = elevations
+        merged_df["Azimuth"] = azimuths
+        return merged_df
+
     def merge_obstruction_with_status_and_location(
         self,
         filename: str,
@@ -168,6 +209,11 @@ class DataFeatureExtraction:
                     on="timestamp",
                     how="inner",
                 )
+            else:
+                # if in stationary mode, manually add lat, lon, alt columns with values from config
+                merged_df["lat"] = config.LATITUDE
+                merged_df["lon"] = config.LONGITUDE
+                merged_df["alt"] = config.ALTITUDE
 
             merged_df.dropna(inplace=True)
             return merged_df
@@ -221,8 +267,8 @@ class DataFeatureExtraction:
             observed_positions = []
             for _, row in timeslot_df.iterrows():
                 timestamp_dt = pd.to_datetime(row["timestamp"])
-                elevation = row["alt"]
-                azimuth = row["boresightAzimuthDeg"]
+                elevation = row["Elevation"]
+                azimuth = row["Azimuth"]
                 observed_positions.append((timestamp_dt, (elevation, azimuth)))
 
             return observed_positions
