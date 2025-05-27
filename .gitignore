@@ -5,3 +5,10 @@ __pycache__/
 starlink-grpc-tools/__pycache__/
 starlink/data
 figures/
+data-test/
+data-test-mobile/
+test/
+test-2/
+data-test-2/
+data-test-3/
+data-test-4/

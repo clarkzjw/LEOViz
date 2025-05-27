@@ -51,7 +51,7 @@ def get_obstruction_map_by_timestamp(df_obstruction_map, timestamp):
     return closest_row["obstruction_map"].reshape(123, 123)
 
 
-def get_starlink_generation_by_norad_id(norad_id):
+def get_starlink_generation_by_norad_id(norad_id) -> str:
     # Exception sub-ranges known to be v2 Mini within v1.5 range
     v2mini_exceptions = [
         (57290, 57311),
@@ -79,16 +79,58 @@ def get_starlink_generation_by_norad_id(norad_id):
         return "Unknown"
 
 
-def rotate_points(x, y, angle):
+def rotate_points(x, y, angle) -> tuple[float, float]:
     """Rotates points by the given angle."""
     x_rot = x * np.cos(angle) - y * np.sin(angle)
     y_rot = x * np.sin(angle) + y * np.cos(angle)
     return x_rot, y_rot
 
 
+def get_fov_degree_from_model(model: str) -> float:
+    """
+    Returns the field of view (FoV) in degrees based on the antenna model.
+    # https://olegkutkov.me/forum/index.php?topic=35.0
+
+    # REV1 - Original Starlink "Dishy"
+    # rev1_pre_production, rev1_production, rev1_proto3
+
+    # REV2 - First mass production Starlink "Dishy"
+    # rev2_proto1, rev2_proto2, rev_proto3, rev2_proto4
+
+    # https://api.starlink.com/public-files/specification_sheet_mini.pdf
+    # Mini: 110
+    # mini_prod1, mini_prod2, mini_prod3
+
+    # https://api.starlink.com/public-files/Starlink%20Product%20Specifications_Standard.pdf
+    # Standard Actuated (rev3): 100 (should be 110 as well?)
+    # rev3_proto0, rev3_proto1, rev3_proto2
+
+    # https://api.starlink.com/public-files/specification_sheet_standard.pdf
+    # Standard, no actuated (rev4): 110
+    # rev4_prod1, rev4_prod2, rev4_prod3, rev4_catapult_proto1
+
+    # https://api.starlink.com/public-files/Starlink%20Product%20Specifications_HighPerformance.pdf
+    # https://api.starlink.com/public-files/specification_sheet_flat_high_performance.pdf
+    # High Performance: 140
+    # Flat High Performance: 140
+    # hp1_proto0, hp1_proto1, hp1_proto2
+
+    # https://api.starlink.com/public-files/specification_sheet_enterprise.pdf
+    # Enterprise: 110
+    """
+
+    if str.startswith(model, "mini_") or str.startswith(model, "rev3_") or str.startswith(model, "rev4_"):
+        return 110.0
+    elif str.startswith(model, "hp1_"):
+        return 140.0
+    else:
+        return 110.0
+
+
 def plot_once(row, df_obstruction_map, df_cumulative_obstruction_map, df_rtt, df_merged, all_satellites):
-    # TODO: make it as a configurable parameter to input dish FoV based on different antenna models
-    base_radius = 60
+    hardwareVersion = df_merged["hardwareVersion"].dropna().iloc[0]
+    fov_degree = get_fov_degree_from_model(hardwareVersion)
+    base_radius = fov_degree / 2
 
     timestamp_str = row["Timestamp"].strftime("%Y-%m-%d %H:%M:%S%z")
     connected_sat_name = row["Connected_Satellite"]
@@ -154,8 +196,6 @@ def plot_once(row, df_obstruction_map, df_cumulative_obstruction_map, df_rtt, df
 
     # FOV ellipse and axes
     df_filtered = df_merged[df_merged["timestamp"] == row["Timestamp"]]
-    # TODO:
-    # get titleAngleDeg and boresightAzimuthDeg from each row
     tiltAngleDeg = df_filtered["tiltAngleDeg"].iloc[0]
     boresightAzimuthDeg = df_filtered["boresightAzimuthDeg"].iloc[0]
 

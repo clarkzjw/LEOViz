@@ -31,6 +31,7 @@ class DataFeatureExtraction:
         """Initialize the DataFeatureExtraction with required components."""
         self.status_columns = [
             "timestamp",
+            "hardwareVersion",
             "sinr",
             "popPingLatencyMs",
             "downlinkThroughputBps",
@@ -78,8 +79,10 @@ class DataFeatureExtraction:
         """Extract fields for dish status data."""
         alignment = status.get("alignmentStats", {})
         quaternion = status.get("ned2dishQuaternion", {})
+        deviceInfo = status.get("deviceInfo", {})
         return [
             current_time if current_time is not None else time.time(),
+            deviceInfo.get("hardwareVersion", ""),
             status.get("phyRxBeamSnrAvg", 0),
             status.get("popPingLatencyMs", 0),
             status.get("downlinkThroughputBps", 0),
@@ -188,6 +191,10 @@ class DataFeatureExtraction:
             df_status["timestamp"] = pd.to_datetime(df_status["timestamp"], unit="s")
             df_status = df_status.drop(columns=["attitudeEstimationState"])
             df_status = df_status.set_index("timestamp").resample("1s").min().reset_index()
+
+            # fill missing alignment stats
+            alignment_cols = ["tiltAngleDeg", "boresightAzimuthDeg", "boresightElevationDeg"]
+            df_status[alignment_cols] = (df_status[alignment_cols].ffill() + df_status[alignment_cols].bfill()) / 2
 
             # Merge obstruction and status data
             merged_df = pd.merge(
