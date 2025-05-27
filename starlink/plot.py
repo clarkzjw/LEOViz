@@ -153,7 +153,8 @@ def plot_once(row, df_obstruction_map, df_cumulative_obstruction_map, df_rtt, df
     axObstructionMapInstantaneous = fig.add_subplot(gs00[3, 0])
     axObstructionMapCumulative = fig.add_subplot(gs00[3, 1])
 
-    frame_type_int = df_obstruction_map["frame_type"].iloc[0]
+    frame_type_int = df_obstruction_map["frame_type"].dropna().iloc[0] if not df_obstruction_map.empty else 0
+
     if frame_type_int == 0:
         FRAME_TYPE = "UNKNOWN"
     elif frame_type_int == 1:
@@ -196,6 +197,9 @@ def plot_once(row, df_obstruction_map, df_cumulative_obstruction_map, df_rtt, df
 
     # FOV ellipse and axes
     df_filtered = df_merged[df_merged["timestamp"] == row["Timestamp"]]
+    if df_filtered.empty:
+        print(f"No data for timestamp {timestamp_str}")
+        return
     tiltAngleDeg = df_filtered["tiltAngleDeg"].iloc[0]
     boresightAzimuthDeg = df_filtered["boresightAzimuthDeg"].iloc[0]
 
@@ -292,13 +296,18 @@ def plot_once(row, df_obstruction_map, df_cumulative_obstruction_map, df_rtt, df
 
     if candidate_satellites:
         for name, alt, az in candidate_satellites:
-            axFOV.scatter(np.radians(az), 90 - alt, color="red", s=10)
+            text_color = "black"
+            sat_color = "gray"
+            if name == connected_sat_name:
+                text_color = "green"
+                sat_color = "red"
+            axFOV.scatter(np.radians(az), 90 - alt, color=sat_color, s=10)
             axFOV.text(
                 np.radians(az),
-                90 - alt,
-                name,
+                90 - alt + 5,
+                str.split(name, "-")[1],
                 fontsize=8,
-                color="black",
+                color=text_color,
                 ha="center",
                 va="center",
             )
@@ -455,14 +464,11 @@ def get_connected_satellite_lat_lon(
         if alt.degrees <= 20:
             continue
 
-        name = str.split(sat.name, "-")[1]
-        candidate_satellites.append((name, alt.degrees, az.degrees))
+        candidate_satellites.append((sat.name, alt.degrees, az.degrees))
 
         if sat.name == sat_name:
             connected_sat_lat = subsat.latitude.degrees
             connected_sat_lon = subsat.longitude.degrees
-            connected_sat_name = sat.name
-            print(connected_sat_lat, connected_sat_lon, connected_sat_name)
         else:
             if (
                 subsat.latitude.degrees > centralLat - offsetLat * 1.5
