@@ -154,6 +154,8 @@ def plot_once(row, df_obstruction_map, df_cumulative_obstruction_map, df_rtt, df
 
     # FOV ellipse and axes
     df_filtered = df_merged[df_merged["timestamp"] == row["Timestamp"]]
+    # TODO:
+    # get titleAngleDeg and boresightAzimuthDeg from each row
     tiltAngleDeg = df_filtered["tiltAngleDeg"].iloc[0]
     boresightAzimuthDeg = df_filtered["boresightAzimuthDeg"].iloc[0]
 
@@ -248,7 +250,6 @@ def plot_once(row, df_obstruction_map, df_cumulative_obstruction_map, df_rtt, df
         satellite_lats = [s[0] for s in all_satellites_in_canvas]
         axSat.scatter(satellite_lons, satellite_lats, transform=projPlateCarree, color="gray", s=30)
 
-    print("Candidate satellites:", len(candidate_satellites))
     if candidate_satellites:
         for name, alt, az in candidate_satellites:
             axFOV.scatter(np.radians(az), 90 - alt, color="red", s=10)
@@ -394,7 +395,6 @@ def get_connected_satellite_lat_lon(
 
     # filter df_merged for the current timestamp
     df_filtered = df_merged[df_merged["timestamp"] == pd.to_datetime(timestamp_str, utc=True)]
-    print(f"Filtered DataFrame length: {len(df_filtered)}")
     row = df_filtered.iloc[0]
     latitude = row["lat"]
     longitude = row["lon"]
