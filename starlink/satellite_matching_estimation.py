@@ -109,7 +109,6 @@ class SatelliteProcessor:
                 return None
 
             satellites = load.tle_file(tle_file)
-            logger.info(f"Loaded {len(satellites)} Starlink TLE satellites")
 
             # Process data in intervals
             result_df = self.process_intervals(
@@ -297,7 +296,7 @@ class SatelliteProcessor:
             satellites, observer_location, observed_positions_with_timestamps, frame_type
         )
         if not matching_satellites:
-            return observed_positions_with_timestamps, [], []
+            return observed_positions_with_timestamps, None, None
 
         # Calculate distances for the best match
         best_match_satellite = next(sat for sat in satellites if sat.name == matching_satellites[0])
@@ -359,7 +358,7 @@ class SatelliteProcessor:
             while current_time <= end_time:
                 logger.info(f"Estimating connected satellites for timeslot {current_time}")
 
-                observed_positions_with_timestamps, matching_satellites, distances = self.process_feature_time_interval(
+                _, matching_satellites, distances = self.process_feature_time_interval(
                     filename,
                     current_time.year,
                     current_time.month,
@@ -373,7 +372,7 @@ class SatelliteProcessor:
                     df_gps_diagnostics,
                 )
 
-                if matching_satellites:
+                if matching_satellites and distances:
                     for second in range(15):
                         if second < len(distances):
                             results.append(

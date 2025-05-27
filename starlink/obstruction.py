@@ -156,7 +156,7 @@ class ObstructionMap:
         for coord in white_pixel_coords:
             writer.writerow(
                 [
-                    coord[0],
+                    coord[0].strftime("%Y-%m-%d %H:%M:%S"),
                     coord[1][0],
                     coord[1][1],
                 ]

@@ -31,6 +31,7 @@ class DataFeatureExtraction:
         """Initialize the DataFeatureExtraction with required components."""
         self.status_columns = [
             "timestamp",
+            "hardwareVersion",
             "sinr",
             "popPingLatencyMs",
             "downlinkThroughputBps",
@@ -78,8 +79,10 @@ class DataFeatureExtraction:
         """Extract fields for dish status data."""
         alignment = status.get("alignmentStats", {})
         quaternion = status.get("ned2dishQuaternion", {})
+        deviceInfo = status.get("deviceInfo", {})
         return [
             current_time if current_time is not None else time.time(),
+            deviceInfo.get("hardwareVersion", ""),
             status.get("phyRxBeamSnrAvg", 0),
             status.get("popPingLatencyMs", 0),
             status.get("downlinkThroughputBps", 0),
@@ -181,13 +184,17 @@ class DataFeatureExtraction:
         try:
             # Read obstruction data
             df_obstruction = pd.read_csv(filename)
-            df_obstruction["timestamp"] = pd.to_datetime(df_obstruction["timestamp"], format="%Y-%m-%d %H:%M:%S.%f")
-            df_obstruction = df_obstruction.set_index("timestamp").resample("1s").mean().reset_index()
+            df_obstruction["timestamp"] = pd.to_datetime(df_obstruction["timestamp"], format="%Y-%m-%d %H:%M:%S")
+            df_obstruction = df_obstruction.set_index("timestamp").resample("1s").min().reset_index()
 
             # Convert status timestamps
             df_status["timestamp"] = pd.to_datetime(df_status["timestamp"], unit="s")
             df_status = df_status.drop(columns=["attitudeEstimationState"])
-            df_status = df_status.set_index("timestamp").resample("1s").mean().reset_index()
+            df_status = df_status.set_index("timestamp").resample("1s").min().reset_index()
+
+            # fill missing alignment stats
+            alignment_cols = ["tiltAngleDeg", "boresightAzimuthDeg", "boresightElevationDeg"]
+            df_status[alignment_cols] = (df_status[alignment_cols].ffill() + df_status[alignment_cols].bfill()) / 2
 
             # Merge obstruction and status data
             merged_df = pd.merge(
@@ -200,9 +207,18 @@ class DataFeatureExtraction:
             # Add location data for mobile installations
             if config.MOBILE and df_location is not None:
                 df_location["timestamp"] = pd.to_datetime(df_location["timestamp"], unit="s")
-                # drop timezone for timestamp
                 df_location["timestamp"] = df_location["timestamp"].dt.tz_localize(None)
-                df_location = df_location.set_index("timestamp").resample("1s").mean().reset_index()
+                df_location = df_location.set_index("timestamp").resample("1s").min().reset_index()
+
+                # GPS data is collected every 0.5 second from the gRPC interface
+                # In theory, there shouldn't be NaN values when resampling every 1 second
+                # In certain scenarios, gRPC interface may respond slow, causing gaps in the collected GPS data
+                # These gaps should be at most a few seconds, thus fill missing values by averaging
+                # before and after NaN should be fine
+
+                # Exclude timestamp column from arithmetic operations
+                numeric_cols = df_location.select_dtypes(include=[np.number]).columns
+                df_location[numeric_cols] = (df_location[numeric_cols].ffill() + df_location[numeric_cols].bfill()) / 2
                 merged_df = pd.merge(
                     merged_df,
                     df_location,
@@ -215,7 +231,16 @@ class DataFeatureExtraction:
                 merged_df["lon"] = config.LONGITUDE
                 merged_df["alt"] = config.ALTITUDE
 
-            merged_df.dropna(inplace=True)
+            # TODO:
+            # only drop rows with NaN in X and Y columns (i.e., no obstruction data)
+            # It is possible to fill missing obstruction data by averaging as well
+            # but we need to handle timeslot boundaries, which is a bit tricky
+            # a better solution is to ensure obstruction data is collected every second
+            merged_df = merged_df[(merged_df["X"].notna()) & (merged_df["Y"].notna())].reset_index(drop=True)
+
+            merged_df["timestamp"] = merged_df["timestamp"].dt.tz_localize("UTC")
+            merged_df["X"] = merged_df["X"].astype(int)
+            merged_df["Y"] = merged_df["Y"].astype(int)
             return merged_df
 
         except Exception as e:
@@ -248,9 +273,10 @@ class DataFeatureExtraction:
         try:
             # Read obstruction data
             df_obstruction_merged = pd.read_csv(merged_data_file)
+            # 2025-05-27 07:33:14+00:00
             df_obstruction_merged["timestamp"] = pd.to_datetime(
-                df_obstruction_merged["timestamp"], format="%Y-%m-%d %H:%M:%S"
-            )
+                df_obstruction_merged["timestamp"], format="%Y-%m-%d %H:%M:%S%z"
+            ).dt.tz_localize(None)
 
             # Get data for the specified timestamp
             timestamp_dt = pd.to_datetime(timestamp).tz_localize(None)
@@ -267,8 +293,8 @@ class DataFeatureExtraction:
             observed_positions = []
             for _, row in timeslot_df.iterrows():
                 timestamp_dt = pd.to_datetime(row["timestamp"])
-                elevation = row["Elevation"]
-                azimuth = row["Azimuth"]
+                elevation = 90 - row["Elevation"]
+                azimuth = row["Azimuth"] % 360
                 observed_positions.append((timestamp_dt, (elevation, azimuth)))
 
             return observed_positions

@@ -133,6 +133,6 @@ def run(func):
 
 def load_tle():
     global satellites
-    directory = Path(TLE_DATA_DIR).joinpath(ensure_data_directory(TLE_DATA_DIR))
+    directory = Path(TLE_DATA_DIR).joinpath(ensure_data_directory(str(TLE_DATA_DIR)))
     satellites = load.tle_file(TLE_URL, True, "{}/starlink-tle-{}.txt".format(directory, date_time_string()))
-    print("Loaded {} Starlink TLE satellites".format(len(satellites)))
+    print("Loaded {} Starlink satellites from TLE data".format(len(satellites)))
