@@ -331,7 +331,7 @@ def plot():
     all_satellites = load_tle_from_file(TLE_DATA)
     connected_satellites = load_connected_satellites(f"{DATA_DIR}/serving_satellite_data-{DATE_TIME}.csv")
 
-    df_processed["timestamp"] = pd.to_datetime(df_processed["timestamp"]).dt.tz_localize("UTC")
+    df_processed["timestamp"] = pd.to_datetime(df_processed["timestamp"])
     df_merged = pd.merge(df_processed, connected_satellites, left_on="timestamp", right_on="Timestamp", how="inner")
 
     centralLat = df_merged["lat"].mean()
