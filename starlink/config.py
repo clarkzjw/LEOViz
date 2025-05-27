@@ -1,4 +1,3 @@
-# flake8: noqa: E501
 import os
 import re
 from pathlib import Path
@@ -24,9 +23,7 @@ TLE_URL = "https://celestrak.org/NORAD/elements/gp.php?GROUP=starlink&FORMAT=tle
 INTERVAL_MS = os.getenv("INTERVAL", "10ms")
 DURATION = os.getenv("DURATION", "2m")
 
-TIMEDELTA_REGEX = (
-    r"((?P<days>-?\d+)d)?" r"((?P<hours>-?\d+)h)?" r"((?P<minutes>-?\d+)m)?"
-)
+TIMEDELTA_REGEX = r"((?P<days>-?\d+)d)?" r"((?P<hours>-?\d+)h)?" r"((?P<minutes>-?\d+)m)?"
 TIMEDELTA_PATTERN = re.compile(TIMEDELTA_REGEX, re.IGNORECASE)
 
 
@@ -42,6 +39,8 @@ def parse_delta(delta):
     if match:
         parts = {k: int(v) for k, v in match.groupdict().items() if v}
         return timedelta(**parts)
+    else:
+        return timedelta(hours=1)
 
 
 DURATION_SECONDS = parse_delta(DURATION).seconds
