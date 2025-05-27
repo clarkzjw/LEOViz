@@ -1,9 +1,11 @@
 import os
+import math
 import logging
 import argparse
 import subprocess
 
 from copy import deepcopy
+from typing import List
 from pathlib import Path
 from datetime import datetime
 from multiprocessing import Pool
@@ -14,10 +16,11 @@ import cartopy
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 
+from skyfield.api import wgs84
 from matplotlib import pyplot as plt
 from matplotlib import dates as mdates
 from matplotlib import gridspec
-from skyfield.api import load
+from skyfield.api import load, EarthSatellite
 
 from util import load_ping, load_tle_from_file, load_connected_satellites
 from pop import get_pop_data, get_home_pop
@@ -76,7 +79,17 @@ def get_starlink_generation_by_norad_id(norad_id):
         return "Unknown"
 
 
-def plot_once(row, df_obstruction_map, df_cumulative_obstruction_map, df_rtt, df_sinr, all_satellites):
+def rotate_points(x, y, angle):
+    """Rotates points by the given angle."""
+    x_rot = x * np.cos(angle) - y * np.sin(angle)
+    y_rot = x * np.sin(angle) + y * np.cos(angle)
+    return x_rot, y_rot
+
+
+def plot_once(row, df_obstruction_map, df_cumulative_obstruction_map, df_rtt, df_merged, all_satellites):
+    # TODO: make it as a configurable parameter to input dish FoV based on different antenna models
+    base_radius = 60
+
     timestamp_str = row["Timestamp"].strftime("%Y-%m-%d %H:%M:%S%z")
     connected_sat_name = row["Connected_Satellite"]
     plot_current = pd.to_datetime(timestamp_str, format="%Y-%m-%d %H:%M:%S%z")
@@ -139,6 +152,43 @@ def plot_once(row, df_obstruction_map, df_cumulative_obstruction_map, df_rtt, df
     axFOV.set_theta_direction(-1)
     axFOV.grid(True)
 
+    # FOV ellipse and axes
+    df_filtered = df_merged[df_merged["timestamp"] == row["Timestamp"]]
+    tiltAngleDeg = df_filtered["tiltAngleDeg"].iloc[0]
+    boresightAzimuthDeg = df_filtered["boresightAzimuthDeg"].iloc[0]
+
+    center_shift = tiltAngleDeg
+    x_radius = base_radius
+    y_radius = math.sqrt(base_radius**2 - tiltAngleDeg**2)
+
+    theta = np.linspace(0, 2 * np.pi, 300)
+    x = x_radius * np.cos(theta) + center_shift
+    y = y_radius * np.sin(theta)
+    r = np.sqrt(x**2 + y**2)
+    angles = np.arctan2(y, x) + np.deg2rad(boresightAzimuthDeg)
+    axFOV.plot(angles, r, "r", label=f"FOV (Base Radius: {base_radius})")
+
+    major_axis_x = np.array([center_shift + x_radius, center_shift - x_radius])
+    major_axis_y = np.array([0, 0])
+    minor_axis_x = np.array([center_shift, center_shift])
+    minor_axis_y = np.array([y_radius, -y_radius])
+    major_axis_x_rot, major_axis_y_rot = rotate_points(major_axis_x, major_axis_y, np.deg2rad(boresightAzimuthDeg))
+    minor_axis_x_rot, minor_axis_y_rot = rotate_points(minor_axis_x, minor_axis_y, np.deg2rad(boresightAzimuthDeg))
+    axFOV.plot(
+        np.arctan2(major_axis_y_rot, major_axis_x_rot),
+        np.sqrt(major_axis_x_rot**2 + major_axis_y_rot**2),
+        "red",
+        linestyle="--",
+        linewidth=1,
+    )
+    axFOV.plot(
+        np.arctan2(minor_axis_y_rot, minor_axis_x_rot),
+        np.sqrt(minor_axis_x_rot**2 + minor_axis_y_rot**2),
+        "red",
+        linestyle="--",
+        linewidth=1,
+    )
+
     axSat.scatter(centralLon, centralLat, transform=projPlateCarree, color="green", label="Dish", s=10)
 
     try:
@@ -175,8 +225,8 @@ def plot_once(row, df_obstruction_map, df_cumulative_obstruction_map, df_rtt, df
         )
         axFullRTT.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M:%S"))
 
-    all_satellites_in_canvas, connected_sat_lat, connected_sat_lon = get_connected_satellite_lat_lon(
-        timestamp_str, connected_sat_name, all_satellites
+    all_satellites_in_canvas, candidate_satellites, connected_sat_lat, connected_sat_lon = (
+        get_connected_satellite_lat_lon(timestamp_str, connected_sat_name, all_satellites, df_merged)
     )
     axSat.scatter(
         connected_sat_lon, connected_sat_lat, transform=projPlateCarree, color="blue", label=connected_sat_name, s=30
@@ -197,6 +247,20 @@ def plot_once(row, df_obstruction_map, df_cumulative_obstruction_map, df_rtt, df
         satellite_lons = [s[1] for s in all_satellites_in_canvas]
         satellite_lats = [s[0] for s in all_satellites_in_canvas]
         axSat.scatter(satellite_lons, satellite_lats, transform=projPlateCarree, color="gray", s=30)
+
+    print("Candidate satellites:", len(candidate_satellites))
+    if candidate_satellites:
+        for name, alt, az in candidate_satellites:
+            axFOV.scatter(np.radians(az), 90 - alt, color="red", s=10)
+            axFOV.text(
+                np.radians(az),
+                90 - alt,
+                name,
+                fontsize=8,
+                color="black",
+                ha="center",
+                va="center",
+            )
 
     axSat.set_title(f"Timestamp: {timestamp_str}, Connected satellite: {connected_sat_name}, {connected_sat_gen}")
     axSat.legend(loc="upper left")
@@ -297,7 +361,7 @@ def plot():
             # plot_once(row, df_obstruction_map, df_rtt, df_sinr, all_satellites)
             result = pool.apply_async(
                 plot_once,
-                args=(row, df_obstruction_map, df_cumulative_obstruction_map, df_rtt, df_sinr, all_satellites),
+                args=(row, df_obstruction_map, df_cumulative_obstruction_map, df_rtt, df_merged, all_satellites),
             )
             results.append(result)
 
@@ -312,7 +376,9 @@ def plot():
         pool.join()
 
 
-def get_connected_satellite_lat_lon(timestamp_str, sat_name, all_satellites):
+def get_connected_satellite_lat_lon(
+    timestamp_str, sat_name, all_satellites: List[EarthSatellite], df_merged: pd.DataFrame
+):
     timestamp_dt = datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S%z")
 
     all_satellites_in_canvas = []
@@ -326,9 +392,32 @@ def get_connected_satellite_lat_lon(timestamp_str, sat_name, all_satellites):
         timestamp_dt.second,
     )
 
+    # filter df_merged for the current timestamp
+    df_filtered = df_merged[df_merged["timestamp"] == pd.to_datetime(timestamp_str, utc=True)]
+    print(f"Filtered DataFrame length: {len(df_filtered)}")
+    row = df_filtered.iloc[0]
+    latitude = row["lat"]
+    longitude = row["lon"]
+    altitude = row["alt"]
+
+    location = wgs84.latlon(latitude, longitude, altitude)
+
+    candidate_satellites = []
+
     for sat in all_satellites:
         geocentric = sat.at(time_ts)
         subsat = geocentric.subpoint()
+
+        difference = sat - location
+        topocentric = difference.at(time_ts)
+        alt, az, _ = topocentric.altaz()
+
+        if alt.degrees <= 20:
+            continue
+
+        name = str.split(sat.name, "-")[1]
+        candidate_satellites.append((name, alt.degrees, az.degrees))
+
         if sat.name == sat_name:
             connected_sat_lat = subsat.latitude.degrees
             connected_sat_lon = subsat.longitude.degrees
@@ -345,6 +434,7 @@ def get_connected_satellite_lat_lon(timestamp_str, sat_name, all_satellites):
                 all_satellites_in_canvas.append((subsat.latitude.degrees, subsat.longitude.degrees, sat.name))
     return (
         all_satellites_in_canvas,
+        candidate_satellites,
         connected_sat_lat,
         connected_sat_lon,
     )
