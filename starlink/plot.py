@@ -29,11 +29,11 @@ cartopy.config["data_dir"] = os.getenv("CARTOPY_DIR", cartopy.config.get("data_d
 
 logger = logging.getLogger(__name__)
 
-POP_DATA = None
+POP_DATA = {}
 HOME_POP = None
 
-centralLat = None
-centralLon = None
+centralLat = 0.0
+centralLon = 0.0
 offsetLon = 20
 offsetLat = 10
 resolution = "10m"
@@ -145,7 +145,7 @@ def plot_once(row, df_obstruction_map, df_cumulative_obstruction_map, df_rtt, df
             connected_sat_gen = get_starlink_generation_by_norad_id(sat.model.satnum)
             break
 
-    fig = plt.figure(figsize=(20, 10))
+    fig = plt.figure(figsize=(30, 15))
     gs0 = gridspec.GridSpec(1, 2, figure=fig, width_ratios=[5, 5])
 
     gs00 = gs0[0].subgridspec(4, 2)
@@ -183,11 +183,13 @@ def plot_once(row, df_obstruction_map, df_cumulative_obstruction_map, df_rtt, df
     axSat.add_feature(cfeature.STATES, linewidth=0.3, edgecolor="brown")
     axSat.add_feature(cfeature.BORDERS, linewidth=0.5, edgecolor="blue")
 
-    gs01 = gs0[1].subgridspec(4, 1)
+    gs01 = gs0[1].subgridspec(6, 1)
 
     axFullRTT = fig.add_subplot(gs01[0, :])
     axRTT = fig.add_subplot(gs01[1, :])
-    axFOV = fig.add_subplot(gs01[2:, :], projection="polar")
+    axFullAlt = fig.add_subplot(gs01[2, :])
+    axAlt = fig.add_subplot(gs01[3, :])
+    axFOV = fig.add_subplot(gs01[4:, :], projection="polar")
 
     axFOV.set_ylim(0, 90)
     axFOV.set_yticks(np.arange(0, 91, 10))
@@ -264,11 +266,7 @@ def plot_once(row, df_obstruction_map, df_cumulative_obstruction_map, df_rtt, df
         axFullRTT.plot(
             df_rtt["timestamp"], df_rtt["rtt"], color="blue", label="RTT", linestyle="None", markersize=1, marker="."
         )
-        axFullRTT.axvline(
-            x=plot_current,
-            color="red",
-            linestyle="--",
-        )
+        axFullRTT.axvline(x=plot_current, color="red", linestyle="--")
         axFullRTT.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M:%S"))
 
     all_satellites_in_canvas, candidate_satellites, connected_sat_lat, connected_sat_lon = (
@@ -339,6 +337,21 @@ def plot_once(row, df_obstruction_map, df_cumulative_obstruction_map, df_rtt, df
         axRTT.set_title(f"RTT at {timestamp_str}")
         axRTT.set_ylabel("RTT (ms)")
         axRTT.set_xticklabels([])
+
+    axFullAlt.plot(df_merged["timestamp"], df_merged["alt"], color="blue", label="Altitude", linewidth=1)
+    axFullAlt.axvline(x=plot_current, color="red", linestyle="--")
+    axFullAlt.set_ylim(df_merged["alt"].min() * 0.9, df_merged["alt"].max() * 1.1)
+    axFullAlt.set_title(f"Altitude at {timestamp_str}")
+    axFullAlt.set_ylabel("Altitude (m)")
+    axFullAlt.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M:%S"))
+
+    dfAltZoomed = df_merged[(df_merged["timestamp"] >= zoom_start) & (df_merged["timestamp"] <= zoom_end)]
+    axAlt.plot(dfAltZoomed["timestamp"], dfAltZoomed["alt"], color="blue", label="Altitude", linewidth=1)
+    axAlt.axvline(x=plot_current, color="red", linestyle="--")
+    axAlt.set_ylim(dfAltZoomed["alt"].min() * 0.9, dfAltZoomed["alt"].max() * 1.1)
+    axAlt.set_title(f"Altitude at {timestamp_str}")
+    axAlt.set_ylabel("Altitude (m)")
+    axAlt.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M:%S"))
 
     plt.tight_layout()
     plt.savefig(f"{FIGURE_DIR}/{timestamp_str}.png")

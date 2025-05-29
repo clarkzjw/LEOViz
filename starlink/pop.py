@@ -5,7 +5,7 @@ import subprocess
 POP_JSON = "https://raw.githubusercontent.com/clarkzjw/starlink-geoip-data/refs/heads/master/map/pop.json"
 
 
-def get_pop_data(centralLat, centralLon, offsetLat, offsetLon):
+def get_pop_data(centralLat, centralLon, offsetLat, offsetLon) -> dict:
     try:
         response = httpx.get(POP_JSON)
         response.raise_for_status()
@@ -29,10 +29,10 @@ def get_pop_data(centralLat, centralLon, offsetLat, offsetLon):
         }
     except httpx.RequestError as e:
         print(f"An error occurred while fetching POP data: {e}")
-        return None
+        return {}
     except ValueError as e:
         print(f"An error occurred while parsing POP data: {e}")
-        return None
+        return {}
 
 
 def get_home_pop():
