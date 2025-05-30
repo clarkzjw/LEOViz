@@ -1,6 +1,6 @@
 docker run -d \
   -v ./sample-data:/app/starlink/data \
-  clarkzjw/leoviz:starlink \
+  leoviz:starlink \
   poetry run python3 plot.py --id 2025-04-15-01-31-27
 
 sleep 120
