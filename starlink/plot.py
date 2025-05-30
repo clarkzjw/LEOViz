@@ -46,9 +46,11 @@ projPlateCarree = ccrs.PlateCarree()
 # Add at the top with other globals
 worker_satellites = None
 
+
 def init_worker(tle_file):
     global worker_satellites
     worker_satellites = load_tle_from_file(tle_file)
+
 
 def get_obstruction_map_by_timestamp(df_obstruction_map, timestamp):
     # 2025-04-12 06:43:14+00:00
@@ -136,7 +138,7 @@ def get_fov_degree_from_model(model: str) -> float:
 
 def plot_once(row, df_obstruction_map, df_cumulative_obstruction_map, df_rtt, df_merged, is_mobile=False):
     global worker_satellites
-    
+
     hardwareVersion = df_merged["hardwareVersion"].dropna().iloc[0]
     fov_degree = get_fov_degree_from_model(hardwareVersion)
     base_radius = fov_degree / 2
@@ -155,13 +157,14 @@ def plot_once(row, df_obstruction_map, df_cumulative_obstruction_map, df_rtt, df
             break
 
     # Adjust figure size based on mobile flag
-    fig_height = 20 if is_mobile else 15
-    fig = plt.figure(figsize=(30, fig_height))
-    
+    fig_width = 27 if is_mobile else 20
+    fig_height = 15 if is_mobile else 11
+
+    fig = plt.figure(figsize=(fig_width, fig_height))
+    gs0 = gridspec.GridSpec(2, 2, figure=fig, height_ratios=[2, 1])
+
     if is_mobile:
         # Mobile layout with street map
-        gs0 = gridspec.GridSpec(2, 2, figure=fig, height_ratios=[2, 1])
-        
         # Top row: Satellite map and RTT/Alt
         gs_top = gs0[0, :].subgridspec(1, 2)
         axSat = fig.add_subplot(gs_top[0, 0], projection=projStereographic)
@@ -170,39 +173,42 @@ def plot_once(row, df_obstruction_map, df_cumulative_obstruction_map, df_rtt, df
         axRTT = fig.add_subplot(gs_right[1])
         axFullAlt = fig.add_subplot(gs_right[2])
         axAlt = fig.add_subplot(gs_right[3])
-        
+
         # Bottom row: FOV, Street Map, and Obstruction maps all in one line
-        gs_middle = gs0[1, :].subgridspec(1, 3, width_ratios=[1.2, 1, 1])  # Made FOV slightly wider
+        gs_middle = gs0[1, :].subgridspec(1, 4, width_ratios=[1.2, 1, 1, 1])  # Made FOV slightly wider
         axFOV = fig.add_subplot(gs_middle[0, 0], projection="polar")
         axStreetMap = fig.add_subplot(gs_middle[0, 1], projection=ccrs.PlateCarree())
-        gs_obstruction = gs_middle[0, 2].subgridspec(1, 2)
+        axStreetMapSat = fig.add_subplot(gs_middle[0, 2], projection=ccrs.PlateCarree())
+        gs_obstruction = gs_middle[0, 3].subgridspec(1, 2)
         axObstructionMapInstantaneous = fig.add_subplot(gs_obstruction[0, 0])
         axObstructionMapCumulative = fig.add_subplot(gs_obstruction[0, 1])
-        
+
         # Set up street map with increased zoom
         df_filtered = df_merged[df_merged["timestamp"] == row["Timestamp"]]
         if not df_filtered.empty:
             current_lat = df_filtered["lat"].iloc[0]
             current_lon = df_filtered["lon"].iloc[0]
             boresight_az = df_filtered["boresightAzimuthDeg"].iloc[0]
-            
+
             axStreetMap.set_extent(
-                [
-                    current_lon - 0.005,
-                    current_lon + 0.005,
-                    current_lat - 0.005,
-                    current_lat + 0.005,
-                ],
+                [current_lon - 0.005, current_lon + 0.005, current_lat - 0.005, current_lat + 0.005],
                 crs=projPlateCarree,
             )
-            
+            axStreetMapSat.set_extent(
+                [current_lon - 0.005, current_lon + 0.005, current_lat - 0.005, current_lat + 0.005],
+                crs=projPlateCarree,
+            )
+
             osm_tiles = cimgt.OSM()
+            sat_tiles = cimgt.GoogleTiles(style="satellite")
             zoom = 17
             axStreetMap.add_image(osm_tiles, zoom)
-            
+            axStreetMapSat.add_image(sat_tiles, zoom)
+
             # Plot dish location
             axStreetMap.scatter(current_lon, current_lat, transform=projPlateCarree, color="red", label="Dish", s=50)
-            
+            axStreetMapSat.scatter(current_lon, current_lat, transform=projPlateCarree, color="red", label="Dish", s=50)
+
             # Add direction arrow
             arrow_length = 0.001  # Adjust this value to change arrow length
             # Convert azimuth to radians and adjust for map coordinates
@@ -210,18 +216,38 @@ def plot_once(row, df_obstruction_map, df_cumulative_obstruction_map, df_rtt, df
             angle_rad = np.radians(90 - boresight_az)
             end_lon = current_lon + arrow_length * np.cos(angle_rad)
             end_lat = current_lat + arrow_length * np.sin(angle_rad)
-            axStreetMap.arrow(current_lon, current_lat, 
-                             end_lon - current_lon, end_lat - current_lat,
-                             transform=projPlateCarree,
-                             color='red', width=0.0001, head_width=0.0003,
-                             head_length=0.0003, label='Boresight')
-            
+            axStreetMap.arrow(
+                current_lon,
+                current_lat,
+                end_lon - current_lon,
+                end_lat - current_lat,
+                transform=projPlateCarree,
+                color="red",
+                width=0.0001,
+                head_width=0.0003,
+                head_length=0.0003,
+                label="Boresight",
+            )
+            axStreetMapSat.arrow(
+                current_lon,
+                current_lat,
+                end_lon - current_lon,
+                end_lat - current_lat,
+                transform=projPlateCarree,
+                color="red",
+                width=0.0001,
+                head_width=0.0003,
+                head_length=0.0003,
+                label="Boresight",
+            )
+
             axStreetMap.legend(loc="upper right")
             axStreetMap.set_title("Street Map View (OSM Tiles)")
+
+            axStreetMapSat.legend(loc="upper right")
+            axStreetMapSat.set_title("Satellite Map View (Google Tiles)")
+
     else:
-        # Non-mobile layout without street map
-        gs0 = gridspec.GridSpec(2, 2, figure=fig)
-        
         # Top row: Satellite map and RTT/Alt
         gs_top = gs0[0, :].subgridspec(1, 2)
         axSat = fig.add_subplot(gs_top[0, 0], projection=projStereographic)
@@ -230,7 +256,7 @@ def plot_once(row, df_obstruction_map, df_cumulative_obstruction_map, df_rtt, df
         axRTT = fig.add_subplot(gs_right[1])
         axFullAlt = fig.add_subplot(gs_right[2])
         axAlt = fig.add_subplot(gs_right[3])
-        
+
         # Bottom row: FOV and Obstruction maps
         gs_bottom = gs0[1, :].subgridspec(1, 2)
         axFOV = fig.add_subplot(gs_bottom[0, 0], projection="polar")
@@ -270,11 +296,11 @@ def plot_once(row, df_obstruction_map, df_cumulative_obstruction_map, df_rtt, df
 
     currentObstructionMap = get_obstruction_map_by_timestamp(df_obstruction_map, timestamp_str)
     axObstructionMapInstantaneous.imshow(currentObstructionMap, cmap="gray")
-    axObstructionMapInstantaneous.set_title("Instantaneous satellite trajectory from gRPC")
+    axObstructionMapInstantaneous.set_title("Instantaneous satellite trajectory")
 
     cumulativeObstructionMap = get_obstruction_map_by_timestamp(df_cumulative_obstruction_map, timestamp_str)
     axObstructionMapCumulative.imshow(cumulativeObstructionMap, cmap="gray")
-    axObstructionMapCumulative.set_title(f"Cumulative obstruction map, frame type: {FRAME_TYPE}")
+    axObstructionMapCumulative.set_title(f"Cumulative obstruction map\nFrame type: {FRAME_TYPE}")
 
     axFOV.set_ylim(0, 90)
     axFOV.set_yticks(np.arange(0, 91, 10))
@@ -354,9 +380,8 @@ def plot_once(row, df_obstruction_map, df_cumulative_obstruction_map, df_rtt, df
         axFullRTT.axvline(x=plot_current, color="red", linestyle="--")
         axFullRTT.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M:%S"))
         # Rotate and align the tick labels so they look better
-        axFullRTT.tick_params(axis='x', rotation=45)
         # Adjust the layout to prevent label cutoff
-        plt.setp(axFullRTT.get_xticklabels(), ha='right')
+        plt.setp(axFullRTT.get_xticklabels(), ha="right")
 
     all_satellites_in_canvas, candidate_satellites, connected_sat_lat, connected_sat_lon = (
         get_connected_satellite_lat_lon(timestamp_str, connected_sat_name, worker_satellites, df_merged)
@@ -430,13 +455,10 @@ def plot_once(row, df_obstruction_map, df_cumulative_obstruction_map, df_rtt, df
     axFullAlt.plot(df_merged["timestamp"], df_merged["alt"], color="blue", label="Altitude", linewidth=1)
     axFullAlt.axvline(x=plot_current, color="red", linestyle="--")
     axFullAlt.set_ylim(df_merged["alt"].min() * 0.9, df_merged["alt"].max() * 1.1)
-    axFullAlt.set_title(f"Altitude at {timestamp_str}")
+    axFullAlt.set_title("Altitude")
     axFullAlt.set_ylabel("Altitude (m)")
     axFullAlt.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M:%S"))
-    # Rotate and align the tick labels so they look better
-    axFullAlt.tick_params(axis='x', rotation=45)
-    # Adjust the layout to prevent label cutoff
-    plt.setp(axFullAlt.get_xticklabels(), ha='right')
+    axFullAlt.set_xticklabels([])
 
     dfAltZoomed = df_merged[(df_merged["timestamp"] >= zoom_start) & (df_merged["timestamp"] <= zoom_end)]
     axAlt.plot(dfAltZoomed["timestamp"], dfAltZoomed["alt"], color="blue", label="Altitude", linewidth=1)
@@ -446,15 +468,19 @@ def plot_once(row, df_obstruction_map, df_cumulative_obstruction_map, df_rtt, df
     axAlt.set_ylabel("Altitude (m)")
     axAlt.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M:%S"))
     # Rotate and align the tick labels so they look better
-    axAlt.tick_params(axis='x', rotation=45)
+    axAlt.tick_params(axis="x", rotation=45)
     # Adjust the layout to prevent label cutoff
-    plt.setp(axAlt.get_xticklabels(), ha='right')
+    plt.setp(axAlt.get_xticklabels(), ha="right")
 
     # Adjust FOV size and position
-    axFOV.set_position([axFOV.get_position().x0 - 0.02,  # Move left
-                       axFOV.get_position().y0,          # Keep same vertical position
-                       axFOV.get_position().width * 1.2, # Make wider
-                       axFOV.get_position().height * 1.2]) # Make taller
+    axFOV.set_position(
+        [
+            axFOV.get_position().x0 - 0.02,  # Move left
+            axFOV.get_position().y0,  # Keep same vertical position
+            axFOV.get_position().width * 1.2,  # Make wider
+            axFOV.get_position().height * 1.2,
+        ]
+    )  # Make taller
 
     plt.tight_layout()
     plt.savefig(f"{FIGURE_DIR}/{timestamp_str}.png")
@@ -585,8 +611,8 @@ def get_connected_satellite_lat_lon(
             connected_sat_lon = subsat.longitude.degrees
         else:
             if (
-                subsat.latitude.degrees > centralLat - offsetLat * 1.5
-                and subsat.latitude.degrees < centralLat + offsetLat * 1.5
+                subsat.latitude.degrees > centralLat - offsetLat
+                and subsat.latitude.degrees < centralLat + offsetLat
                 and subsat.longitude.degrees > centralLon - offsetLon
                 and subsat.longitude.degrees < centralLon + offsetLon
             ):
