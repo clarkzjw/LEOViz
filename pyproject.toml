@@ -22,7 +22,8 @@ dependencies = [
     "opencv-python (>=4.11.0.86,<5.0.0.0)",
     "cartopy (>=0.24.1,<0.25.0)",
     "httpx (>=0.28.1,<0.29.0)",
-    "fastkml[lxml] (>=1.1.0,<2.0.0)"
+    "fastkml[lxml] (>=1.1.0,<2.0.0)",
+    "scipy (>=1.12.0,<2.0.0)"
 ]
 
 [build-system]
