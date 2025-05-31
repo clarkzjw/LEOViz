@@ -5,7 +5,7 @@ import argparse
 import subprocess
 
 from copy import deepcopy
-from typing import List
+from typing import List, Dict
 from pathlib import Path
 from datetime import datetime
 from multiprocessing import Pool
@@ -16,6 +16,7 @@ import cartopy
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 import cartopy.io.img_tiles as cimgt
+from sklearn.cluster import KMeans
 
 from skyfield.api import wgs84
 from matplotlib import pyplot as plt
@@ -45,11 +46,89 @@ projPlateCarree = ccrs.PlateCarree()
 
 # Add at the top with other globals
 worker_satellites = None
+SATELLITE_ALTITUDE_BANDS = {}
+ALTITUDE_BAND_COLORS = {
+    0: 'green',   # Low altitude
+    1: 'orange',  # Mid altitude
+    2: 'red'      # High altitude
+}
+
+
+def classify_satellite_altitudes(satellites: List[EarthSatellite], n_clusters: int = 3) -> Dict[str, int]:
+    """Classify satellites into altitude bands using KMeans clustering.
+    
+    Args:
+        satellites: List of satellite objects from TLE data
+        n_clusters: Number of altitude bands to classify into
+        
+    Returns:
+        Dict mapping satellite names to their altitude band (0 to n_clusters-1)
+    """
+    # Calculate altitudes for all satellites
+    altitudes = []
+    sat_names = []
+    ts = load.timescale()
+    time = ts.now()  # Use current time for altitude calculation
+    
+    for sat in satellites:
+        try:
+            geocentric = sat.at(time)
+            subsat = geocentric.subpoint()
+            altitude = subsat.elevation.km
+            if not np.isnan(altitude) and not np.isinf(altitude):
+                altitudes.append(altitude)
+                sat_names.append(sat.name)
+        except Exception as e:
+            logger.warning(f"Failed to calculate altitude for satellite {sat.name}: {str(e)}")
+            continue
+    
+    if not altitudes:
+        logger.error("No valid satellite altitudes could be calculated")
+        return {sat.name: 0 for sat in satellites}  # Default all to lowest band if no valid altitudes
+    
+    # Reshape for KMeans
+    X = np.array(altitudes).reshape(-1, 1)
+    
+    # Perform KMeans clustering
+    kmeans = KMeans(n_clusters=n_clusters, random_state=0, n_init='auto')
+    labels = kmeans.fit_predict(X)
+    
+    # Sort by cluster centers and relabel
+    sorted_centers = np.argsort(kmeans.cluster_centers_.flatten())
+    label_map = {old: new for new, old in enumerate(sorted_centers)}
+    
+    # Get altitude bounds for each band
+    band_bounds = []
+    for i in range(n_clusters):
+        band_altitudes = [alt for alt, label in zip(altitudes, labels) if label_map[label] == i]
+        min_alt = min(band_altitudes)
+        max_alt = max(band_altitudes)
+        band_bounds.append((min_alt, max_alt))
+    
+    # Create mapping of satellite names to altitude bands
+    result = {name: label_map[label] for name, label in zip(sat_names, labels)}
+    
+    # Add default band (0) for any satellites that failed altitude calculation
+    for sat in satellites:
+        if sat.name not in result:
+            result[sat.name] = 0
+    
+    # Store altitude bounds globally for legend
+    global ALTITUDE_BAND_NAMES
+    ALTITUDE_BAND_NAMES = {
+        0: f'Low Altitude ({band_bounds[0][0]:.0f}-{band_bounds[0][1]:.0f} km)',
+        1: f'Mid Altitude ({band_bounds[1][0]:.0f}-{band_bounds[1][1]:.0f} km)',
+        2: f'High Altitude ({band_bounds[2][0]:.0f}-{band_bounds[2][1]:.0f} km)'
+    }
+    
+    return result
 
 
 def init_worker(tle_file):
     global worker_satellites
+    global SATELLITE_ALTITUDE_BANDS
     worker_satellites = load_tle_from_file(tle_file)
+    SATELLITE_ALTITUDE_BANDS = classify_satellite_altitudes(worker_satellites)
 
 
 def get_obstruction_map_by_timestamp(df_obstruction_map, timestamp):
@@ -138,6 +217,7 @@ def get_fov_degree_from_model(model: str) -> float:
 
 def plot_once(row, df_obstruction_map, df_cumulative_obstruction_map, df_rtt, df_merged, is_mobile=False):
     global worker_satellites
+    global SATELLITE_ALTITUDE_BANDS
 
     hardwareVersion = df_merged["hardwareVersion"].dropna().iloc[0]
     fov_degree = get_fov_degree_from_model(hardwareVersion)
@@ -386,8 +466,10 @@ def plot_once(row, df_obstruction_map, df_cumulative_obstruction_map, df_rtt, df
     all_satellites_in_canvas, candidate_satellites, connected_sat_lat, connected_sat_lon = (
         get_connected_satellite_lat_lon(timestamp_str, connected_sat_name, worker_satellites, df_merged)
     )
+
+    sat_color = ALTITUDE_BAND_COLORS[SATELLITE_ALTITUDE_BANDS.get(connected_sat_name, 0)]
     axSat.scatter(
-        connected_sat_lon, connected_sat_lat, transform=projPlateCarree, color="blue", label=connected_sat_name, s=30
+        connected_sat_lon, connected_sat_lat, transform=projPlateCarree, color=sat_color, label=connected_sat_name, s=30
     )
     axSat.text(
         connected_sat_lon, connected_sat_lat, connected_sat_name, transform=projPlateCarree, fontsize=10, color="red"
@@ -404,15 +486,23 @@ def plot_once(row, df_obstruction_map, df_cumulative_obstruction_map, df_rtt, df
     if all_satellites_in_canvas:
         satellite_lons = [s[1] for s in all_satellites_in_canvas]
         satellite_lats = [s[0] for s in all_satellites_in_canvas]
-        axSat.scatter(satellite_lons, satellite_lats, transform=projPlateCarree, color="gray", s=30)
-
+        satellite_names = [s[2] for s in all_satellites_in_canvas]
+        
+        # Color satellites by their altitude band
+        satellite_colors = [ALTITUDE_BAND_COLORS[SATELLITE_ALTITUDE_BANDS.get(name, 0)] for name in satellite_names]
+        axSat.scatter(satellite_lons, satellite_lats, transform=projPlateCarree, color=satellite_colors, s=30)
+        
+        # Add legend for altitude bands
+        for band, color in ALTITUDE_BAND_COLORS.items():
+            axSat.scatter([], [], color=color, label=ALTITUDE_BAND_NAMES[band])
+    
     if candidate_satellites:
         for name, alt, az in candidate_satellites:
             text_color = "black"
-            sat_color = "gray"
+            sat_color = ALTITUDE_BAND_COLORS[SATELLITE_ALTITUDE_BANDS.get(name, 0)]
             if name == connected_sat_name:
-                text_color = "green"
-                sat_color = "red"
+                text_color = "white"  # Changed to white for better contrast
+                # Keep the altitude band color for the connected satellite
             axFOV.scatter(np.radians(az), 90 - alt, color=sat_color, s=10)
             axFOV.text(
                 np.radians(az),
