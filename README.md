@@ -242,7 +242,8 @@ If successful, you will find the video file `starlink-2025-05-30-23-51-26.mp4` i
 ## Citation
 
 The method used to estimate the connected satellites is based on our LEO-NET'24 paper [Trajectory-based Serving Satellite Identification with User Terminal's Field-of-View](https://dl.acm.org/doi/10.1145/3697253.3697266).
-Please cite the paper if you use this tool in your research.
+
+Please cite the paper and reference this GitHub repository (https://github.com/clarkzjw/LEOViz) if you use this tool in your research.
 
 ```bibtex
 @inproceedings{10.1145/3697253.3697266,
