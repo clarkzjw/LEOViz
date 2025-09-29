@@ -3,6 +3,12 @@
 [![release](https://github.com/clarkzjw/LEOViz/actions/workflows/release.yaml/badge.svg)](https://github.com/clarkzjw/LEOViz/actions/workflows/release.yaml) ![Docker Pulls](https://img.shields.io/docker/pulls/clarkzjw/leoviz)
  ![Docker Image Size (tag)](https://img.shields.io/docker/image-size/clarkzjw/leoviz/starlink)
 
+**Note**
+
+There are known issues in the current implementation to correctly identify connected satellites when the dish is mobile. We are testing a new implementation to fix mobility issues and we aim to release the new version soon.
+
+---
+
 ⚠️ This repository provides a **Proof-of-Concept** implementation to visualize the connected satellites, *SINR* (OneWeb only) and network latency of Starlink and OneWeb user terminals, in either stationary or mobility (e.g., mounted on vehicles) mode. The implementation is not optimized for performance and real-time and is intended for research purposes only.
 
 🔗 Check out https://oac.uvic.ca/starlink/ for related research and projects.
