@@ -5,7 +5,7 @@
 
 **Note**
 
-There are known issues in the current implementation to correctly identify connected satellites when the dish is mobile. We are testing a new implementation to fix mobility issues and we aim to release the new version soon.
+There are some known issues in the current implementation to correctly identify connected satellites such as when the dish is mobile. We are testing a new implementation to fix those issues and we aim to release the new version soon.
 
 ---
 
