@@ -3,9 +3,11 @@
 [![release](https://github.com/clarkzjw/LEOViz/actions/workflows/release.yaml/badge.svg)](https://github.com/clarkzjw/LEOViz/actions/workflows/release.yaml) ![Docker Pulls](https://img.shields.io/docker/pulls/clarkzjw/leoviz)
  ![Docker Image Size (tag)](https://img.shields.io/docker/image-size/clarkzjw/leoviz/starlink)
 
-**Note**
+**Note (2026/01/29)**
 
-There are some known issues in the current implementation to correctly identify connected satellites such as when the dish is mobile. We are testing a new implementation to fix those issues and we aim to release the new version soon.
+**The current version of LEOViz in this GitHub repository only works for stationary dish installation.**
+
+**The code related to the arXiv submission [Demystifying Starlink Network Performance under Vehicular Mobility with Dynamic Beam Switching](https://arxiv.org/abs/2601.13790) that works with mobile Starlink dishes and supports dynamic beam switching detection will be released soon.**
 
 ---
 
