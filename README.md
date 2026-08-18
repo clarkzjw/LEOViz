@@ -3,6 +3,16 @@
 [![release](https://github.com/clarkzjw/LEOViz/actions/workflows/release.yaml/badge.svg)](https://github.com/clarkzjw/LEOViz/actions/workflows/release.yaml) ![Docker Pulls](https://img.shields.io/docker/pulls/clarkzjw/leoviz)
  ![Docker Image Size (tag)](https://img.shields.io/docker/image-size/clarkzjw/leoviz/starlink)
 
+**Note (2026/08/18)**
+
+**The current version still uses the legacy TLE format for satellite ephemeris downloaded from Celestrak. The TLE format no longer supports satellite ID >100000 and should be migrated.**
+
+**We have been testing a new version of LEOViz that significantly improves the satellite identification accuracy in both stationary and mobile Starlink scenario.**
+
+**We aim to release the new LEOViz to the public in early September. Please stay tuned.**
+
+---
+
 **Note (2026/01/29)**
 
 **The current version of LEOViz in this GitHub repository only works for stationary dish installation.**
