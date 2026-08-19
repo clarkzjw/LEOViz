@@ -212,7 +212,7 @@ To generate the visualization video with the data collected in the previous step
 docker run -it --rm \
   -v ./data:/app/starlink/data \
   clarkzjw/leoviz:starlink \
-  poetry run python3 plot.py --lat LAT --lon LON --id 2025-05-30-23-51-26
+  poetry run python3 plot.py --id 2025-05-30-23-51-26
 ```
 
 **Mobility mode**
